@@ -144,12 +144,11 @@ function proxyCommandBody() {
     "---",
     "description: Set or remove the HTTP proxy for one provider (works with no reachable model)",
     "---",
-    "!`node " + quoted + " proxy-cmd $ARGUMENTS`",
+    "!`node " + quoted + " proxy-cmd --silent $ARGUMENTS`",
     "",
-    // The result is delivered separately via a noReply message, so it reaches the user even when
-    // this command has just disconnected the only reachable provider. Telling the model not to
-    // repeat it prevents a second copy appearing later, once a turn finally completes.
-    "The result has already been shown to the user. Do not repeat it. Reply with nothing.",
+    // Nothing after the shell substitution. The expansion captures no output (--silent), so
+    // the whole template resolves to an empty string: there is no prompt for a model to answer,
+    // and the result reaches the user through the noReply message the plugin posts instead.
   ].join(NLc)
 }
 

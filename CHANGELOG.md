@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.0.18
+
+Make the /proxy command genuinely silent, so there is no prompt to answer.
+
+1.0.17 emptied the command parts, which was not enough: the turn still ran and the model replied
+with something of its own invention -- after a removal it said the provider "now connects
+directly", which is the opposite of what had just happened.
+
+Clearing the parts removes the content but not the turn. The fix is upstream of that: the command
+template runs the script with `--silent`, and the script writes its result to a file and prints
+nothing. The shell substitution in the template therefore expands to an empty string, the whole
+command message is empty, and there is nothing for a model to respond to.
+
+The command body is now only the shell substitution. No instruction text remains, because there
+is no longer a model in the path to instruct.
+
+The result still reaches the user: the plugin hook posts it as its own message with `noReply`,
+which persists a message and skips the model loop.
+
+`--silent` is filtered out of the argument string, since it sits before `$ARGUMENTS` in the
+template and would otherwise be read as a proxy URL.
+
 ## 1.0.17
 
 Stop `/proxy` starting a model turn at all.

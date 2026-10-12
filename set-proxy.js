@@ -604,13 +604,15 @@ if (!invokedAsScript) {
   )
 
   if (argv[0] === 'proxy-cmd') {
-  const outText = runProxyCommand(argv.slice(1).join(" "))
+  const outText = runProxyCommand(argv.slice(1).filter((a) => a !== "--silent").join(" "))
   try {
     fs.writeFileSync(path.join(dir, 'proxy-last-result.json'), JSON.stringify({ text: outText, at: Date.now() }))
   } catch {
     /* the result file is a convenience; never fail the command over it */
   }
-  console.log(outText)
+  // --silent: the /proxy command runs this way, so the shell expansion captures no output and
+  // the resulting prompt is empty. The user still sees the result, posted by the plugin hook.
+  if (!process.argv.includes("--silent")) console.log(outText)
     process.exit(0)
   }
 
