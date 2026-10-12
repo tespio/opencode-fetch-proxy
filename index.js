@@ -120,6 +120,29 @@ function ensureProxyCommandFile() {
   }
 }
 
+/**
+ * Reads an `options.proxy` declaration out of opencode.jsonc, if any, so the tool can
+ * report a proxy it does not own. Deliberately tolerant: this only needs to find a string,
+ * not to parse JSONC properly, and any failure returns an empty string.
+ */
+function readDeclaredProxy() {
+  const dir = configDir()
+  for (const name of ["opencode.jsonc", "opencode.json"]) {
+    try {
+      const text = fs.readFileSync(path.join(dir, name), "utf8")
+      // Strip comments so a commented-out proxy is not mistaken for a live one.
+      const stripped = text
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^[ \t]*\/\/.*$/gm, "")
+      const m = /"proxy"\s*:\s*"([^"]+)"/.exec(stripped)
+      if (m && m[1]) return m[1]
+    } catch {
+      /* try the next candidate */
+    }
+  }
+  return ""
+}
+
 function proxyProvidersPath() {
   return path.join(configDir(), "proxy-providers.json")
 }
@@ -505,7 +528,7 @@ const PROXY_TOOL_INPUT = {
  * Prefers the SDK helper (which coerces the schema into what OpenCode expects) and
  * falls back to a plain object, so the file stays dependency-free.
  */
-function buildSetProxyTool(toolHelper, state, persist, getRegistry) {
+function buildSetProxyTool(toolHelper, state, persist, getRegistry, readDeclaredProxy) {
   const run = async (raw) => {
     const args = raw && typeof raw === "object" ? raw : {}
 
@@ -539,13 +562,23 @@ function buildSetProxyTool(toolHelper, state, persist, getRegistry) {
 
     // ---- remove ----
     if (args.remove === true) {
+      // A proxy can also be declared on the provider itself. That declaration takes
+      // precedence over this mapping and the tool cannot remove it, so report it rather
+      // than claiming nothing is configured while traffic is plainly being proxied.
+      const alsoDeclared = readDeclaredProxy()
       if (!mappingProxy(state.byProvider[providerID])) {
         return {
-          title: "Proxy: nothing to remove",
-          output:
-            "**" + providerLabel + "** has no proxy set, so there is nothing to undo. " +
-            "It is already connecting directly, which is honestly the simpler life." +
-            NL + NL + "Configured: " + (all || "nothing yet"),
+          title: alsoDeclared ? "Proxy: declared in config" : "Proxy: nothing to remove",
+          output: alsoDeclared
+            ? "**" + providerLabel + "** has no proxy in the mapping file, but `opencode.jsonc` " +
+              "declares one that takes precedence:" + NL + NL +
+              "```" + NL + "\"options\": { \"proxy\": \"" + redactProxy(alsoDeclared) + "\" }" + NL + "```" + NL + NL +
+              "Remove that line to stop proxying. This command will not edit opencode.jsonc, " +
+              "because the file is JSONC and rewriting it would discard your comments." +
+              (all ? NL + NL + "Mapping file also has: " + all : "")
+            : "**" + providerLabel + "** has no proxy set, so there is nothing to undo. " +
+              "It is already connecting directly, which is honestly the simpler life." +
+              NL + NL + "Configured: " + (all || "nothing yet"),
         }
       }
       delete state.byProvider[providerID]
@@ -874,7 +907,7 @@ export const FetchProxyPlugin = async ({ client } = {}) => {
     },
 
     tool: {
-set_proxy: buildSetProxyTool(toolHelper, proxyState, persistProxyProviders, () => registry),
+set_proxy: buildSetProxyTool(toolHelper, proxyState, persistProxyProviders, () => registry, readDeclaredProxy),
     },
 
     /**

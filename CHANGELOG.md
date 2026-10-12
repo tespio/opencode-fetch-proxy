@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.2
+
+Fix a misleading `/proxy remove` result. When a proxy was declared as `options.proxy` in
+`opencode.jsonc`, removing via the command reported "has no proxy set ... already connecting
+directly" while that declaration was in fact routing the provider's traffic. The command only
+owns its own mapping file and never edits `opencode.jsonc`, so it now reads the declared value
+back and says where the proxy actually lives, instead of denying one exists.
+
+The check strips comments first, so a commented-out `proxy` key is not mistaken for a live one.
+
 ## 1.0.1
 
 Fix the repository metadata. 1.0.0 shipped with `repository`, `homepage` and `bugs` pointing at
