@@ -112,7 +112,7 @@ https://raw.githubusercontent.com/tespio/opencode-fetch-proxy/v1.0.0/index.js
 **3. npm** — one line, and the only route that updates itself:
 
 ```jsonc
-{ "plugin": ["@init3/opencode-fetch-proxy"] }
+{ "plugin": ["opencode-fetch-proxy"] }
 ```
 
 A bare package name is rewritten to `@latest` and installed automatically at startup with npm's

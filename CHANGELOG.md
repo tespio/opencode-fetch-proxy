@@ -1,9 +1,14 @@
 # Changelog
 
-## Unreleased
+## 1.0.1
 
-- Scoped the package as `@init3/opencode-fetch-proxy`. The unscoped name `opencode-fetch-proxy` is held by a
-  registry placeholder awaiting a staged release, so it cannot be published to directly.
+Fix the repository metadata. 1.0.0 shipped with `repository`, `homepage` and `bugs` pointing at
+`github.com/init3/opencode-fetch-proxy`, which does not exist — the GitHub account is `tespio`
+while `init3` is the npm account, and the two were conflated when the package was first
+committed. Published versions are immutable, so this is corrected in a new version.
+
+No functional change.
+
 ## 1.0.0
 
 First release. Built and verified against OpenCode 1.19.0 desktop on Windows 11, with a live
