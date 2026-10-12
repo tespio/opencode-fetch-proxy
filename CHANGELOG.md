@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.0.14
+
+Say what `/proxy remove` actually does to reachability.
+
+Removing the proxy disconnects any provider that is reachable only through it. That was not
+stated, and it has a second consequence that looks like a bug: the confirmation text is delivered
+when a model turn ends, and the next turn cannot complete without a route -- so the confirmation
+can take a while to appear, or appear only after a proxy is set again.
+
+Measured, with the provider reachable only through the proxy:
+
+```
+with the mapping present : HTTP 401 in 186ms
+after /proxy remove      : unreachable after 10501ms (UND_ERR_CONNECT_TIMEOUT)
+```
+
+The remove output now states the consequence and points at the action that avoids it: setting a
+new proxy replaces the old one, so switching proxies never needs a removal.
+
 ## 1.0.13
 
 Make `/proxy` take effect immediately, regardless of which hooks fire.

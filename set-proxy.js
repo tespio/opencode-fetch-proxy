@@ -535,12 +535,21 @@ if (!invokedAsScript) {
         const ids = Object.keys(map)
         if (!ids.length) return 'Nothing is configured, so there is nothing to remove.'
         writeMapping({})
-        return 'Removed the proxy for ' + ids.join(', ') + '. Applied on the next request.'
+        return [
+          'Proxy removed for ' + ids.join(', ') + ".",
+          'Any provider reachable only through a proxy is now unreachable until one is set again.',
+          'To switch proxies instead of disconnecting, run /proxy <newURL> directly.',
+        ].join(NL)
       }
       if (!map[target.id]) return 'No proxy is set for ' + who + ', so there is nothing to remove.'
       delete map[target.id]
       writeMapping(map)
-      return 'Removed the proxy for ' + who + '. Applied on the next request.'
+
+      return [
+        'Proxy removed for ' + who + ".",
+        'If that endpoint is reachable only through the proxy it is now unreachable until one is set again.',
+        'To switch proxies instead of disconnecting, run /proxy <newURL> directly.',
+      ].join(NL)
     }
 
     if (lower === 'list' || lower === 'show' || lower === 'status') {
