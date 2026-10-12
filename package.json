@@ -1,6 +1,6 @@
 {
   "name": "opencode-fetch-proxy",
-  "version": "1.0.12",
+  "version": "1.0.13",
   "description": "Route one OpenCode provider through an HTTP proxy — for a LAN model server reachable only via a corporate proxy — without touching the system proxy.",
   "license": "MIT",
   "type": "module",

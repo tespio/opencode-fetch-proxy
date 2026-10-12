@@ -932,6 +932,27 @@ export const FetchProxyPlugin = async ({ client } = {}) => {
   let lastProviders = null
   let inline = []
   let registry = buildRegistry(globalCfg, inline, byProvider)
+
+/** Signature of the mapping file the last time rules were built, for change detection. */
+let mappingStamp = ""
+
+/**
+ * Rebuild the routing rules if proxy-providers.json changed on disk.
+ *
+ * Called from the fetch wrapper, so a mapping written by /proxy takes effect on the next
+ * request without depending on any hook firing. A failed stat leaves the current rules alone.
+ */
+function refreshRulesIfMappingChanged() {
+  try {
+    const st = fs.statSync(proxyProvidersFile)
+    const stamp = String(st.mtimeMs) + ":" + String(st.size)
+    if (stamp === mappingStamp) return
+    mappingStamp = stamp
+    rebuildRules()
+  } catch {
+    /* no mapping file, or unreadable: keep what we have */
+  }
+}
   const dispatchers = new Map()
   const pending = new Map()
   const log = (msg) => console.error(msg)
@@ -943,6 +964,20 @@ export const FetchProxyPlugin = async ({ client } = {}) => {
    * for a mapping that was just removed.
    */
   const rebuildRules = () => {
+    // Re-read the mapping from disk first. Without this the rebuild uses the cached `byProvider`
+    // and produces rules identical to the ones it already had, so a mapping written by /proxy
+    // would never take effect unless a hook had separately refreshed the in-memory copy.
+    try {
+      const fresh = readProxyProviders(proxyProvidersFile)
+      if (JSON.stringify(fresh) !== JSON.stringify(byProvider)) {
+        byProvider = fresh
+        proxyState.byProvider = fresh
+      }
+      const st = fs.statSync(proxyProvidersFile)
+      mappingStamp = String(st.mtimeMs) + ":" + String(st.size)
+    } catch {
+      mappingStamp = ""
+    }
     if (!lastProviders || typeof lastProviders !== "object") {
       registry = buildRegistry(globalCfg, inline, byProvider)
       return
@@ -989,6 +1024,11 @@ export const FetchProxyPlugin = async ({ client } = {}) => {
       return baseFetch(input, init)
     }
     if (!url) return baseFetch(input, init)
+
+    // Re-read the mapping if it changed, so /proxy takes effect on the next request regardless of
+    // which hooks fired. Without this, routing depends on hook timing and a mapping written
+    // mid-session can be ignored entirely.
+    refreshRulesIfMappingChanged()
 
     const proxy = proxyFor(url, registry)
     if (!proxy) return baseFetch(input, init)

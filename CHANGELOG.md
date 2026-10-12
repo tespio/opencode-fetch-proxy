@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.0.13
+
+Make `/proxy` take effect immediately, regardless of which hooks fire.
+
+Routing consulted a registry that was only rebuilt on hooks (`config`, `chat.params`,
+`chat.message`). Rebuilds also reused the in-memory mapping rather than re-reading the file, so a
+rebuild could produce rules identical to the ones it already had.
+
+That made behaviour depend on hook timing. One session rebuilt rules repeatedly and `/proxy`
+appeared to apply with no restart; another fired the config hook twice at startup and never again,
+and `/proxy` looked like it did nothing at all -- writes landed on disk, requests kept going
+direct, and the provider timed out. Reproduced as a test: configure once, then change the mapping
+with no hook calls, and the old code could not see the change.
+
+Two changes:
+
+- `rebuildRules` re-reads `proxy-providers.json` before rebuilding, so a rebuild always reflects
+  the file rather than a cached copy.
+- The fetch wrapper stats the mapping file before deciding a route, and rebuilds when it changed.
+  One `stat` per request, next to the HTTP call it precedes.
+
+The mapping now applies on the next request even if no hook ever fires again.
+
 ## 1.0.12
 
 Stop telling users to restart OpenCode. They do not need to, and the instruction was wrong.
