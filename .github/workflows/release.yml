@@ -18,18 +18,26 @@ name: Release
 #           repository        : opencode-fetch-proxy
 #           workflow filename : release.yml
 #           environment       : (leave blank)
-#   2. Actions -> Release -> Run workflow -> tag_to_publish = v1.0.3
+#   2. Actions -> Release -> Run workflow -> tag_to_publish = v1.0.4
 #
 # Or skip CI entirely and publish locally:  npm publish --access public
+#
+# The floating `v1` tag: this workflow listens for full version tags only, so moving `v1` does
+# not start a run. That matters because `v1` is re-pointed at every release, and a run comparing it
+# against package.json would fail every time.
 
 on:
   push:
     tags:
-      - "v*"
+      # Full version tags only. The floating `v1` tag is moved on every release by design, so
+      # including it here both duplicated every run and failed one of them: the version check
+      # compares the tag against package.json, and "1" never equals "1.0.4". Since this workflow is
+      # skipped entirely, the version check no longer needs to special-case a moving tag.
+      - "v[0-9]+.[0-9]+.[0-9]+"
   workflow_dispatch:
     inputs:
       tag_to_publish:
-        description: "Tag to publish to npm (e.g. v1.0.3). Leave empty to verify only."
+        description: "Tag to publish to npm (e.g. v1.0.4). Leave empty to verify only."
         required: false
         type: string
 

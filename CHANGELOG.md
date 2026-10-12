@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.0.5
+
+Stop the release workflow failing on the floating `v1` tag.
+
+The workflow triggered on `v*`, which includes `v1`. Moving that tag is part of every release,
+so each release started two runs: one for `vX.Y.Z` and one for `v1`. The second always failed,
+because the version check compares the tag against `package.json` and `1` never equals `1.0.5`.
+Two failure notifications per release, from the project's own convenience tag.
+
+The trigger is now `v[0-9]+.[0-9]+.[0-9]+`, so `v1` no longer starts a run at all. The version
+check is unchanged and still guards real version tags.
+
+No functional change to the plugin.
+
 ## 1.0.4
 
 Ship `install.js`, and document the plugin-discovery rules properly.
