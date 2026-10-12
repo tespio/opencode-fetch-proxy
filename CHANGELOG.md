@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.0.8
+
+Check and repair the model id, which is what produced `The model \`063\` does not exist`.
+
+In `opencode.jsonc` the outer key under `provider` is a provider id you invent; the inner key
+under `models` is a model id the server must actually serve. Both are plain strings and nothing
+validates the inner one when you write it, so naming a provider `063` easily leads to `063`
+appearing as the model key too. The failure surfaces only later, when you try to use the model.
+
+`set-proxy` now asks the provider for `GET /v1/models` and reports what it really serves:
+
+```
+opencode-fetch-proxy-set --models
+```
+
+If the declared model key is not in that list it rewrites the key in `opencode.jsonc`, keeping
+every other line and comment, and saves a `.bak-modelkey` backup first. The browser form has a
+'Check model ids' button that does the same.
+
+Also: the model list is fetched through a manual CONNECT tunnel rather than undici. undici is not
+reliably importable from an installed package, and when the import failed the request silently
+went direct -- which for a proxy-only endpoint looked like a timeout rather than a missing
+dependency.
+
 ## 1.0.7
 
 `set-proxy` now opens a browser form when run without arguments.
