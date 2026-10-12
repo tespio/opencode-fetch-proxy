@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.0.20
+
+Answer the /proxy turn in-process, so it cannot hang or fail.
+
+The command mechanism calls the model unconditionally -- `SessionPrompt.command` always reaches
+`prompt()` -- and a plugin cannot cancel that call. Clearing the parts did not prevent it either:
+an empty-parts request is still issued, and after `/proxy remove` it retried a disconnected
+provider five times before reporting a connection error.
+
+But that call travels through this plugin's patched global fetch. So the plugin answers it
+itself: the command hook arms a local response, and the fetch wrapper returns an empty OpenAI
+chat completion -- 200, `finish_reason: stop`, empty content, and an SSE form for providers that
+request a stream. Measured at 2ms, with no server, no socket and no network.
+
+The arming is a timestamp, consumed on first use, so an abandoned turn cannot swallow a later
+real request. Verified: a request before the command is untouched, the turn is answered locally,
+and the following request goes to the network again.
+
+A background HTTP server was considered and rejected: it would add a listening socket and a
+generated provider entry for something the existing fetch patch can do in two lines.
+
 ## 1.0.19
 
 Remove whitespace-only parts, not just empty ones.

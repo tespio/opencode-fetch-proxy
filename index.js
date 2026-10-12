@@ -478,6 +478,65 @@ function buildRegistry(cfg, inline, byProvider = {}) {
   return { exact, hosts, globs }
 }
 
+/* ------------------------------- local answer for the /proxy command turn */
+
+/**
+ * Armed while a /proxy command turn is in flight, so its model request is answered locally.
+ *
+ * The command mechanism calls the model unconditionally and a plugin cannot cancel that -- but
+ * the call travels through this plugin patched global fetch, so it can be answered here,
+ * in-process. No HTTP server, no socket, no network.
+ *
+ * Why it matters: `/proxy remove` disconnects a provider that is reachable only through the
+ * proxy, so the real request would retry for about a minute and then surface a connection error
+ * for a command that had already succeeded.
+ *
+ * A timestamp rather than a flag, so an abandoned turn cannot swallow a later real request.
+ */
+const commandTurn = { armedUntil: 0 }
+
+/** Arm the local answer. Called from the command hook, immediately before the turn. */
+function armLocalAnswer() {
+  commandTurn.armedUntil = Date.now() + 5 * 60 * 1000
+}
+
+/**
+ * The completion the /proxy turn receives. Shaped as an OpenAI chat completion because that is
+ * what an openai-compatible provider parses. An empty assistant message is the honest answer:
+ * the command already reported its result through the plugin, so the turn has nothing to say.
+ */
+function stubCompletion(model) {
+  return {
+    id: "chatcmpl-proxy-command",
+    object: "chat.completion",
+    created: Math.floor(Date.now() / 1000),
+    model: str(model) || "proxy-command",
+    choices: [{ index: 0, message: { role: "assistant", content: "" }, finish_reason: "stop" }],
+    usage: { prompt_tokens: 0, completion_tokens: 0, total_tokens: 0 },
+  }
+}
+
+/** The same completion as an SSE stream, for providers that ask for one. */
+function stubStream(model) {
+  const name = str(model) || "proxy-command"
+  const frame = (delta, finish) =>
+    "data: " +
+    JSON.stringify({
+      id: "chatcmpl-proxy-command",
+      object: "chat.completion.chunk",
+      created: Math.floor(Date.now() / 1000),
+      model: name,
+      choices: [{ index: 0, delta, finish_reason: finish ?? null }],
+    }) +
+    String.fromCharCode(10, 10)
+  return (
+    frame({ role: "assistant", content: "" }) +
+    frame({}, "stop") +
+    "data: [DONE]" +
+    String.fromCharCode(10, 10)
+  )
+}
+
 function proxyFor(url, registry) {
   let hp = ""
   try {
@@ -1030,6 +1089,26 @@ function refreshRulesIfMappingChanged() {
     // Re-read the mapping if it changed, so /proxy takes effect on the next request regardless of
     // which hooks fired. Without this, routing depends on hook timing and a mapping written
     // mid-session can be ignored entirely.
+    // Answer a /proxy command turn locally, before any routing decision, so it cannot depend
+    // on the mapping the command just changed.
+    if (Date.now() < commandTurn.armedUntil) {
+      commandTurn.armedUntil = 0
+      const requestBody = String(init?.body ?? "")
+      let modelName = ""
+      try {
+        modelName = JSON.parse(requestBody)?.model ?? ""
+      } catch {
+        /* not JSON */
+      }
+      const wantsStream = /"stream"\s*:\s*true/.test(requestBody)
+      const payload = wantsStream ? stubStream(modelName) : JSON.stringify(stubCompletion(modelName))
+      log("[fetch-proxy] " + url + " -> answered locally (proxy command turn)")
+      return new Response(payload, {
+        status: 200,
+        headers: { "content-type": wantsStream ? "text/event-stream" : "application/json" },
+      })
+    }
+
     refreshRulesIfMappingChanged()
 
     const proxy = proxyFor(url, registry)
@@ -1114,6 +1193,28 @@ set_proxy: buildSetProxyTool(toolHelper, proxyState, persistProxyProviders, () =
      * The hook runs after shell expansion and before the model call.
      */
     "command.execute.before": async (input, output) => {
+      // Arm the local answer. The turn is already being issued by the time this runs and it
+      // cannot be cancelled, so make its request succeed locally and instantly.
+      armLocalAnswer()
+      const hookLog = (msg) => {
+        try {
+          fs.appendFileSync(
+            path.join(configDir(), "proxy-hook.log"),
+            new Date().toISOString() + "  " + msg + "\n",
+          )
+        } catch {
+          /* diagnostics must never break the hook */
+        }
+      }
+      hookLog(
+        "fired: command=" + JSON.stringify(input?.command) +
+          " session=" + JSON.stringify(input?.sessionID) +
+          " args=" + JSON.stringify(input?.arguments) +
+          " outputType=" + typeof output +
+          " partsIsArray=" + Array.isArray(output?.parts) +
+          " partsLen=" + (Array.isArray(output?.parts) ? output.parts.length : "n/a") +
+          " parts=" + JSON.stringify(output?.parts)?.slice(0, 400),
+      )
       if (str(input?.command) !== "proxy") return
       const sessionID = str(input?.sessionID)
       if (!sessionID) return
@@ -1162,6 +1263,7 @@ set_proxy: buildSetProxyTool(toolHelper, proxyState, persistProxyProviders, () =
         })
         output.parts.length = 0
         output.parts.push(...kept)
+        hookLog("after filter: partsLen=" + output.parts.length + " kept=" + JSON.stringify(kept)?.slice(0, 200))
       }
     },
 
