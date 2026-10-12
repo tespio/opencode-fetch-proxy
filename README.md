@@ -120,7 +120,7 @@ startup with *"missing package.json or index file"*.
 **2. The GitHub tag** — version-pinned, no registry involved:
 
 ```jsonc
-{ "plugin": ["github:tespio/opencode-fetch-proxy#v1.0.21"] }
+{ "plugin": ["github:tespio/opencode-fetch-proxy#v1.0.22"] }
 ```
 
 Pin the tag: without a tag the spec follows the default branch, so a later commit silently changes
@@ -128,7 +128,7 @@ what you install. If the git spec does not resolve in your build, fetch the sing
 use route 1:
 
 ```
-https://raw.githubusercontent.com/tespio/opencode-fetch-proxy/v1.0.21/index.js
+https://raw.githubusercontent.com/tespio/opencode-fetch-proxy/v1.0.22/index.js
 ```
 
 The pin above is the version this README was written against — check
@@ -204,40 +204,70 @@ happens during a session, so the change applies to the next request.
 /proxy <proxyURL>                 configure the provider this session is using
 /proxy <providerID> <proxyURL>    configure a specific provider
 /proxy remove                     undo it for the current provider
+/proxy list                       show what is configured
 ```
 
+**This works with no reachable model**, which matters because the situation `/proxy` exists for is
+exactly the one where the provider is unreachable. Three mechanisms make that possible, and they are
+worth understanding because the naive version does not work:
+
+**1. The work happens in a shell, not in a model turn.** A slash command is a prompt template, so
+submitting one normally starts a model turn — and the tool inside it only runs after the model
+responds, which cannot happen for an unreachable provider. But the server expands `!`...`` in a
+command template with a real shell *before* it calls the model:
+
+```js
+const shellMatches = shell(template);
+if (shellMatches.length > 0) {
+  const results = yield* Promise.all(shellMatches.map(async ([, cmd]) =>
+    (await text([cmd], { shell, nothrow: true })).text));
+  template = template.replace(bashRegex, () => results[index++]);
+}
+yield* plugin.trigger("command.execute.before", {...}, { parts });
+const result = yield* prompt({ ... });          // model call comes after
+```
+
+So the mapping is written by `set-proxy.js` run from that shell, before any model is involved. The
+command reaches it as an argument, never through a pipe — `cmd.exe` answers a bare `echo` with the
+literal text `ECHO is on.`, which is how an earlier version managed to send that string down the
+pipe.
+
+**2. The result is posted as its own message, with no model.** Clearing the command's parts is not
+enough: the turn is issued regardless, and after `/proxy remove` it retries a provider the command
+just disconnected. So the plugin posts the outcome itself through the SDK's `noReply` flag, which
+persists a message and skips the model loop:
+
+```js
+if (input.noReply === true) return message;   // persist, no model
+return yield* loop({ sessionID });
+```
+
+**3. The turn that is still issued is answered in-process.** It cannot be cancelled from a plugin,
+but it travels through this plugin's patched global `fetch`, so the plugin returns an empty
+completion itself — a few milliseconds, no socket, no network. Without it, the turn would spend about
+a minute retrying and then report a connection error for a command that had already succeeded.
+
+The result is a command that writes a file, reports what it did, and never depends on a provider
+being reachable.
+
 The provider id can be omitted. A `chat.params` hook records the active provider before each model
-request, and the command applies to it. When no request has succeeded yet, the command falls back to
-the provider declared in `opencode.jsonc`, **provided there is exactly one** non-loopback provider.
-It will not guess between several. Writes `~/.config/opencode/proxy-providers.json` and applies
-immediately — no restart.
+request, and the command applies to it. When no request has succeeded yet, it falls back to the
+provider declared in `opencode.jsonc`, **provided there is exactly one** non-loopback provider — it
+will not guess between several. It writes `~/.config/opencode/proxy-providers.json` and applies on
+the next request, with no restart: the plugin re-reads the mapping whenever it changes on disk, so
+this does not depend on any hook firing.
 
-> **`/proxy` cannot bootstrap the model it is meant to configure.** A slash command is a prompt
-> template: submitting it starts a **model turn**, and the `set_proxy` tool runs *inside* that turn,
-> after the model responds. If the provider you want to configure is unreachable — the exact
-> situation `/proxy` exists for — the turn never completes, the tool never runs, and nothing is
-> written. You see `Cannot connect to API: Connect Timeout Error` and retries, and
-> `proxy-providers.json` stays empty.
->
-> This is not fixable in a plugin. A plugin cannot register a TUI command, cannot pre-empt a slash
-> command, and cannot execute anything without an agent turn. Use `set-proxy` below for the first
-> configuration, or `options.proxy`, which needs no turn at all.
+Two cases need care:
 
-So `/proxy` is for **changing** a proxy once a model is reachable:
-
-1. Configure once with `set-proxy` or `options.proxy` (below).
-2. Later, with a working model, `/proxy <proxyURL>` switches the proxy without editing JSON or
-   restarting.
-
-Two cases need care even then:
-
-- **Several providers configured, none proxied yet.** The fallback cannot know which one you mean,
-  so `/proxy` replies *"send one message first"*. Name it explicitly once —
-  `/proxy <providerID> <proxyURL>`.
+- **Several providers configured, none proxied yet.** The fallback cannot know which one you mean, so
+  name it explicitly once: `/proxy <providerID> <proxyURL>`.
 - **`options.proxy` is set on the provider.** That declaration wins over anything `/proxy` writes,
   and `/proxy remove` cannot delete it. The command detects this and tells you where the proxy
   actually lives, rather than reporting that none is configured. Delete the key from
   `opencode.jsonc` if you want `/proxy` to be in charge.
+
+`/proxy remove` disconnects a provider that is reachable only through the proxy. To switch proxies,
+just set the new one — that replaces the old mapping without a removal.
 
 ### Password-protected proxies
 

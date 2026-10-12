@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.0.22
+
+Document what /proxy actually does. No code change.
+
+The README still described the original, wrong mechanism -- that the set_proxy tool runs inside the
+model turn, and therefore that /proxy cannot configure an unreachable provider. That was true of the
+first implementation and is false of the shipped one, which is misleading in the worst direction: it
+tells readers the feature does not work.
+
+The section now describes the three mechanisms that make it work, with the server code that each
+relies on quoted inline: the command template shell expansion that runs before the model call; the
+noReply post that delivers the result as its own message; and the in-process answer for the turn
+that is still issued.
+
+Also corrected: the claim that a restart is needed, and the note about pipes, which is where the
+cmd.exe ECHO-is-on bug came from.
+
 ## 1.0.21
 
 Arm the local answer last, not first.
