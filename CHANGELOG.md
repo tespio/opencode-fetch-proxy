@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.0.25
+
+Replace the README screenshot with one that shows the feature working.
+
+1.0.24 shipped a screenshot that contained the failure this release fixes: a `Connect Timeout Error`
+and `retrying in 11s - attempt #5` from an earlier session, taken before the command was fixed.
+Publishing that as the illustration of a working feature is worse than no screenshot, because it
+documents the bug rather than the behaviour.
+
+The replacement is from a session after the fix: both results appear as they happen, with no model
+reply, no thinking indicator and no retry. The caption says what it shows rather than what it was
+hoped to show.
+
 ## 1.0.24
 
 Add a screenshot of the command working.
