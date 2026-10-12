@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.0.10
+
+Fix the `/proxy` command on Windows, which 1.0.9 got wrong.
+
+1.0.9 piped the arguments through `echo` into the script. Under `cmd.exe` a bare `echo` does not
+print an empty line -- it prints the literal text `ECHO is on.` -- so using `/proxy` with no
+arguments pushed that string down the pipe, and the handler reported a nonsensical URL error.
+
+The arguments are now appended to the command as a normal command-line argument instead:
+
+```
+!`node <set-proxy.js> proxy-cmd $ARGUMENTS`
+```
+
+That removes the shell from the data path entirely, so there is no quoting to get wrong and no
+`echo` behaviour to depend on. The handler accepts argv or stdin, keeping both call shapes valid.
+
+`/proxy` also writes one line per invocation to `proxy-command.log` in the OpenCode config
+directory, recording what argv and stdin actually contained. The previous version failed silently
+from the user's side and there was no way to see why; that is now diagnosable in one file.
+
 ## 1.0.9
 
 `/proxy` now works with no reachable model. This removes the deadlock entirely.

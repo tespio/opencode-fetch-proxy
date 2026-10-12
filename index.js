@@ -126,14 +126,18 @@ function proxyCommandBody() {
   const helper = helperScriptPath()
   if (!helper) return PROMPT_TEMPLATE_BODY
   const NLc = String.fromCharCode(10)
-  // Forward slashes, not JSON.stringify's backslashes: this string is handed to a real shell, and
-  // a Windows path in backslashes loses them to escape processing ("C:\U..." -> "C:U...").
+  // Forward slashes, not JSON.stringify's backslashes: this string is handed to a real shell,
+  // and a Windows path in backslashes loses them to escape processing ("C:\U..." -> "C:U...").
+  //
+  // $ARGUMENTS is passed as a command-line argument, NOT piped through echo: cmd.exe answers a
+  // bare `echo` with the literal text "ECHO is on.", so an argument-less /proxy would push that
+  // down the pipe. argv has no such failure mode and keeps a single code path.
   const quoted = '"' + helper.replace(/\\/g, "/") + '"'
   return [
     "---",
     "description: Set or remove the HTTP proxy for one provider (works with no reachable model)",
     "---",
-    "!`echo $ARGUMENTS | node " + quoted + " proxy-cmd`",
+    "!`node " + quoted + " proxy-cmd $ARGUMENTS`",
     "",
     "Report the result above, then stop.",
   ].join(NLc)

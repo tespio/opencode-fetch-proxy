@@ -426,7 +426,7 @@ async function describeModels(provider) {
  *     list | show             print current state
  *     (anything else)         usage
  */
-function runProxyCommand() {
+function runProxyCommand(argvArgs) {
   let raw = ''
   try {
     raw = fs.readFileSync(0, 'utf8')
@@ -434,8 +434,8 @@ function runProxyCommand() {
     /* no stdin */
   }
 
-  // stdin arrives from the command's shell expansion, which substitutes $ARGUMENTS verbatim:
-  //     !`echo $ARGUMENTS | node <this file> proxy-cmd`
+  // Arguments arrive either as argv (the generated /proxy command) or on stdin.
+  //     !`node <this file> proxy-cmd $ARGUMENTS`
   // A base64 payload is also accepted, so the generated command can keep the command line free
   // of anything but shell-inert characters when that matters.
   let args = raw.trim()
@@ -446,6 +446,24 @@ function runProxyCommand() {
     } catch {
       /* keep the raw text */
     }
+  }
+
+  if (typeof argvArgs === 'string' && argvArgs.trim()) args = argvArgs.trim()
+
+  // Diagnostics. The first version of this shipped a broken shell form -- a bare `echo` under
+  // cmd.exe yields the literal "ECHO is on." -- and there was no way to see what arrived.
+  // One line per invocation; the value is truncated.
+  try {
+    fs.appendFileSync(
+      path.join(dir, 'proxy-command.log'),
+      new Date().toISOString() +
+        '  argv=' + JSON.stringify(String(argvArgs ?? '')) +
+        '  stdin=' + JSON.stringify(String(raw ?? '').slice(0, 120)) +
+        '  used=' + JSON.stringify(String(args).slice(0, 120)) +
+        '\n',
+    )
+  } catch {
+    /* logging must never break the command */
   }
 
   const cfg2 = readConfig()
@@ -545,7 +563,7 @@ const positional = argv.filter(
 )
 
 if (argv[0] === 'proxy-cmd') {
-  console.log(runProxyCommand())
+  console.log(runProxyCommand(argv.slice(1).join(' ')))
   process.exit(0)
 }
 
