@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.0.6
+
+Add `set-proxy.js`, because `/proxy` cannot bootstrap the model it is meant to configure.
+
+A slash command is a prompt template, so submitting `/proxy <url>` starts a model turn, and the
+tool that writes the mapping runs inside that turn — after the model responds. When the only
+configured provider is unreachable, the turn never completes and nothing is written. This is a
+property of how slash commands execute and cannot be fixed in a plugin: a plugin cannot register
+a TUI command, cannot pre-empt a slash command, and cannot run code without an agent turn.
+
+So the mapping now has a way to be written from outside the session:
+
+```
+npx opencode-fetch-proxy-set http://192.168.10.101:3128
+npx opencode-fetch-proxy-set --list
+npx opencode-fetch-proxy-set --remove
+```
+
+It writes the same `proxy-providers.json` the tool writes, choosing the provider the same way
+(explicitly, or the sole non-loopback provider), and refuses a proxy URL with an unencoded
+backslash. Verified end to end: with no `options.proxy` and the mapping written by this script, a
+cold start routes the very first provider request through the proxy.
+
+Restart OpenCode afterwards — the mapping is read at startup and there is no config file watcher.
+
 ## 1.0.5
 
 Stop the release workflow failing on the floating `v1` tag.

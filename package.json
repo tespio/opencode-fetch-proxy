@@ -1,6 +1,6 @@
 {
   "name": "opencode-fetch-proxy",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "Route one OpenCode provider through an HTTP proxy — for a LAN model server reachable only via a corporate proxy — without touching the system proxy.",
   "license": "MIT",
   "type": "module",
@@ -12,6 +12,7 @@
   "files": [
     "index.js",
     "install.js",
+    "set-proxy.js",
     "README.md"
   ],
   "keywords": [
@@ -39,6 +40,7 @@
     "access": "public"
   },
   "bin": {
-    "opencode-fetch-proxy-install": "install.js"
+    "opencode-fetch-proxy-install": "install.js",
+    "opencode-fetch-proxy-set": "set-proxy.js"
   }
 }

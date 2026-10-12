@@ -120,7 +120,7 @@ startup with *"missing package.json or index file"*.
 **2. The GitHub tag** — version-pinned, no registry involved:
 
 ```jsonc
-{ "plugin": ["github:tespio/opencode-fetch-proxy#v1.0.5"] }
+{ "plugin": ["github:tespio/opencode-fetch-proxy#v1.0.6"] }
 ```
 
 Pin the tag: without a tag the spec follows the default branch, so a later commit silently changes
@@ -128,7 +128,7 @@ what you install. If the git spec does not resolve in your build, fetch the sing
 use route 1:
 
 ```
-https://raw.githubusercontent.com/tespio/opencode-fetch-proxy/v1.0.5/index.js
+https://raw.githubusercontent.com/tespio/opencode-fetch-proxy/v1.0.6/index.js
 ```
 
 The pin above is the version this README was written against — check
@@ -168,6 +168,26 @@ options?: {
 };
 ```
 
+### `set-proxy` — configure it from outside the session
+
+The reliable way to configure the **first** proxy, because it needs no model:
+
+```bash
+npx opencode-fetch-proxy-set http://192.168.10.101:3128
+npx opencode-fetch-proxy-set --list          # what is configured, and which providers exist
+npx opencode-fetch-proxy-set --remove        # clear it
+npx opencode-fetch-proxy-set --provider 063 http://192.168.10.101:3128
+npx opencode-fetch-proxy-set --file          # print the mapping file path
+```
+
+It writes the same `proxy-providers.json` that `/proxy` writes, choosing the provider the same way —
+explicitly, or the sole non-loopback provider in `opencode.jsonc`. It refuses a proxy URL containing
+an unencoded backslash, because that parses as a URL while silently dropping the credentials.
+
+**Then restart OpenCode.** The mapping is read at startup and there is no config-file watcher, so a
+running instance will not pick up the change. After a restart the proxy applies from the very first
+provider request, which is what makes this work where `/proxy` cannot.
+
 ### `/proxy` — configure it from inside a session
 
 ```
@@ -177,23 +197,33 @@ options?: {
 ```
 
 The provider id can be omitted. A `chat.params` hook records the active provider before each model
-request, and the command applies to it. When no request has succeeded yet — a brand-new session
-whose selected provider is not reachable — the command falls back to the provider declared in
-`opencode.jsonc`, **provided there is exactly one** non-loopback provider. It will not guess between
-several. Writes `~/.config/opencode/proxy-providers.json` and applies immediately — no restart.
+request, and the command applies to it. When no request has succeeded yet, the command falls back to
+the provider declared in `opencode.jsonc`, **provided there is exactly one** non-loopback provider.
+It will not guess between several. Writes `~/.config/opencode/proxy-providers.json` and applies
+immediately — no restart.
 
-The intended flow therefore works without any bootstrap trick:
+> **`/proxy` cannot bootstrap the model it is meant to configure.** A slash command is a prompt
+> template: submitting it starts a **model turn**, and the `set_proxy` tool runs *inside* that turn,
+> after the model responds. If the provider you want to configure is unreachable — the exact
+> situation `/proxy` exists for — the turn never completes, the tool never runs, and nothing is
+> written. You see `Cannot connect to API: Connect Timeout Error` and retries, and
+> `proxy-providers.json` stays empty.
+>
+> This is not fixable in a plugin. A plugin cannot register a TUI command, cannot pre-empt a slash
+> command, and cannot execute anything without an agent turn. Use `set-proxy` below for the first
+> configuration, or `options.proxy`, which needs no turn at all.
 
-1. Add a custom provider whose endpoint is reachable only through the proxy.
-2. Open a session and select its model. Requests fail — there is no route yet.
-3. Run `/proxy <proxyURL>`. The tool resolves the provider and writes the mapping.
-4. The provider works from that point on.
+So `/proxy` is for **changing** a proxy once a model is reachable:
 
-Two cases still need care:
+1. Configure once with `set-proxy` or `options.proxy` (below).
+2. Later, with a working model, `/proxy <proxyURL>` switches the proxy without editing JSON or
+   restarting.
+
+Two cases need care even then:
 
 - **Several providers configured, none proxied yet.** The fallback cannot know which one you mean,
   so `/proxy` replies *"send one message first"*. Name it explicitly once —
-  `/proxy <providerID> <proxyURL>` — and the shorthand works afterwards.
+  `/proxy <providerID> <proxyURL>`.
 - **`options.proxy` is set on the provider.** That declaration wins over anything `/proxy` writes,
   and `/proxy remove` cannot delete it. The command detects this and tells you where the proxy
   actually lives, rather than reporting that none is configured. Delete the key from
