@@ -420,7 +420,7 @@ if (!invokedAsScript) {
             'Your config declared the model id ' + wrong.map((w) => '<code>' + esc(w) + '</code>').join(', ') +
             ', but <strong>' + esc(provider.id) + '</strong> serves ' + listed +
             '. <strong>Fixed</strong> &mdash; the model key was rewritten (backup: <code>' +
-            esc(path.basename(repair.backup)) + '</code>). <strong>Restart OpenCode.</strong>',
+            esc(path.basename(repair.backup)) + '</code>). <strong>Applied on the next request.</strong>',
         }
       }
       return {
@@ -535,12 +535,12 @@ if (!invokedAsScript) {
         const ids = Object.keys(map)
         if (!ids.length) return 'Nothing is configured, so there is nothing to remove.'
         writeMapping({})
-        return 'Removed the proxy for ' + ids.join(', ') + '. Restart OpenCode.'
+        return 'Removed the proxy for ' + ids.join(', ') + '. Applied on the next request.'
       }
       if (!map[target.id]) return 'No proxy is set for ' + who + ', so there is nothing to remove.'
       delete map[target.id]
       writeMapping(map)
-      return 'Removed the proxy for ' + who + '. Restart OpenCode.'
+      return 'Removed the proxy for ' + who + '. Applied on the next request.'
     }
 
     if (lower === 'list' || lower === 'show' || lower === 'status') {
@@ -573,7 +573,7 @@ if (!invokedAsScript) {
       'Proxy set for ' + who + '.' + '\n' +
       '  ' + redact(args) + '\n' +
       '  written to ' + mappingFile + '\n' +
-      'Restart OpenCode for it to take effect.'
+      'Applied on the next request - no restart needed.'
     )
   }
 
@@ -675,7 +675,7 @@ if (!invokedAsScript) {
     delete mapping[target.id]
     writeMapping(mapping)
     console.log('Removed the proxy mapping for "' + target.id + '".')
-    console.log('Restart OpenCode for it to take effect.')
+    console.log('Applied on the next request - no restart needed.')
     process.exit(0)
   }
 
@@ -713,7 +713,7 @@ if (!invokedAsScript) {
       console.log('precedence. This mapping will not be used until that key is removed.')
     }
     console.log('')
-    console.log('Restart OpenCode for it to take effect.')
+    console.log('Applied on the next request - no restart needed.')
     process.exit(0)
   }
 
@@ -793,8 +793,7 @@ if (!invokedAsScript) {
     <summary>What this writes</summary>
     <p><code>${esc(mappingFile)}</code></p>
     <pre>${esc(JSON.stringify(mapping, null, 2))}</pre>
-    <p class="note">Restart OpenCode afterwards. The mapping is read at startup and there is no config
-    file watcher.</p>
+    <p class="note">Applied on the next request. The plugin re-reads the mapping whenever OpenCode reloads its config, which happens during a session - no restart needed.</p>
   </details>
   </body></html>`
   }
@@ -827,7 +826,7 @@ if (!invokedAsScript) {
         const ids = Object.keys(mapping)
         if (!ids.length) return html(page('Nothing was configured, so there was nothing to remove.'))
         writeMapping({})
-        html(page('Removed ' + ids.length + ' mapping(s). <strong>Restart OpenCode.</strong>', 'ok'))
+        html(page('Removed ' + ids.length + ' mapping(s). <strong>Applied on the next request.</strong>', 'ok'))
         setTimeout(() => server.close(() => process.exit(0)), 400)
         return
       }
@@ -850,7 +849,7 @@ if (!invokedAsScript) {
             (target.declared
               ? '<br><br>Heads up: this provider also declares <code>options.proxy</code> in opencode.jsonc, and that takes precedence &mdash; remove it or this will be ignored.'
               : '') +
-            '<br><br><strong>Restart OpenCode</strong> for it to take effect.',
+            '<br><br><strong>Applied on the next request.</strong>',
           'ok',
         ),
       )

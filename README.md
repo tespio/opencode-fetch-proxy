@@ -120,7 +120,7 @@ startup with *"missing package.json or index file"*.
 **2. The GitHub tag** — version-pinned, no registry involved:
 
 ```jsonc
-{ "plugin": ["github:tespio/opencode-fetch-proxy#v1.0.11"] }
+{ "plugin": ["github:tespio/opencode-fetch-proxy#v1.0.12"] }
 ```
 
 Pin the tag: without a tag the spec follows the default branch, so a later commit silently changes
@@ -128,7 +128,7 @@ what you install. If the git spec does not resolve in your build, fetch the sing
 use route 1:
 
 ```
-https://raw.githubusercontent.com/tespio/opencode-fetch-proxy/v1.0.11/index.js
+https://raw.githubusercontent.com/tespio/opencode-fetch-proxy/v1.0.12/index.js
 ```
 
 The pin above is the version this README was written against — check
@@ -195,9 +195,8 @@ It writes the same `proxy-providers.json` that `/proxy` writes, choosing the pro
 explicitly, or the sole non-loopback provider in `opencode.jsonc`. It refuses a proxy URL containing
 an unencoded backslash, because that parses as a URL while silently dropping the credentials.
 
-**Then restart OpenCode.** The mapping is read at startup and there is no config-file watcher, so a
-running instance will not pick up the change. After a restart the proxy applies from the very first
-provider request, which is what makes this work where `/proxy` cannot.
+No restart needed. The plugin re-reads the mapping every time OpenCode reloads its config, which
+happens during a session, so the change applies to the next request.
 
 ### `/proxy` — configure it from inside a session
 

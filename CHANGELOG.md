@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.0.12
+
+Stop telling users to restart OpenCode. They do not need to, and the instruction was wrong.
+
+The plugin re-reads `proxy-providers.json` every time the config hook runs, and that hook runs
+more than once during a session -- visible in the runtime log as repeated
+`[fetch-proxy] active` / `provider "local" -> ... (from /proxy)` pairs. So a mapping written by
+`/proxy` is picked up on the next request, mid-session, with no restart.
+
+This was tested rather than reasoned about: a user set the proxy and the provider worked
+immediately. Every user-facing message that said otherwise has been corrected, including the
+browser form and the model-id repair.
+
+Worth noting for anyone reading the history: `options.proxy` in `opencode.jsonc` is the case that
+genuinely benefits from a restart, because that file is read by OpenCode itself rather than by the
+plugin. The plugin-owned mapping never needed one.
+
 ## 1.0.11
 
 Stop the helper script being loaded as a plugin.
