@@ -1150,7 +1150,19 @@ set_proxy: buildSetProxyTool(toolHelper, proxyState, persistProxyProviders, () =
       // message, so submitting these parts would only start a model turn whose entire job is to
       // say nothing -- and which cannot complete at all when the command has just disconnected
       // the provider. A local command does not need a model.
-      if (output && Array.isArray(output.parts)) output.parts.length = 0
+      if (output && Array.isArray(output.parts)) {
+        // Remove whitespace-only text parts, not just truncate the array. The shell substitution
+        // occupies its own line in the template, so an empty expansion still leaves a "\n" -- and a
+        // blank part is still a part, which is enough for OpenCode to issue a model request. That
+        // request then times out whenever the command has just disconnected the provider.
+        const kept = output.parts.filter((part) => {
+          if (!part) return false
+          if (part.type === "text") return typeof part.text === "string" && part.text.trim() !== ""
+          return true
+        })
+        output.parts.length = 0
+        output.parts.push(...kept)
+      }
     },
 
     /**

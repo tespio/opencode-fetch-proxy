@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.19
+
+Remove whitespace-only parts, not just empty ones.
+
+1.0.18 ran the command silently so the shell substitution expanded to nothing -- but the
+substitution sits on its own line of the template, so what remained was a newline. A blank part is
+still a part, so OpenCode still issued the model request and the user still waited through a
+connect timeout after `/proxy remove`.
+
+The hook now filters out any text part whose content is empty or whitespace-only. Non-text parts
+are preserved, so an attachment on a command is unaffected, and other commands are untouched.
+
+Tested against the exact expansion the command produces (`"\n"`) and against a file part to make
+sure the filter cannot drop anything it should keep.
+
 ## 1.0.18
 
 Make the /proxy command genuinely silent, so there is no prompt to answer.
