@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.16
+
+Stop the /proxy result appearing twice.
+
+1.0.15 delivered the result as its own message with `noReply`, which lands immediately. But the
+command message still carried the same text, and its instruction was "Report the result above" --
+so once a turn finally completed the model reproduced it, giving a second copy after the proxy was
+restored.
+
+The template now says the result has already been shown and asks for an empty reply. The
+immediate message is the one the user reads; the turn's output is suppressed.
+
+Detecting which copy was which mattered: the late one read `run /proxy directly`, losing the
+`<newURL>` placeholder. That is a paraphrase, so it came from the model rather than from the
+script, which is what identified it as the second delivery rather than a duplicate of the first.
+
 ## 1.0.15
 
 Report the /proxy result independently of reachability.

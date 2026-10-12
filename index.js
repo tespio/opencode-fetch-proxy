@@ -146,7 +146,10 @@ function proxyCommandBody() {
     "---",
     "!`node " + quoted + " proxy-cmd $ARGUMENTS`",
     "",
-    "Report the result above, then stop.",
+    // The result is delivered separately via a noReply message, so it reaches the user even when
+    // this command has just disconnected the only reachable provider. Telling the model not to
+    // repeat it prevents a second copy appearing later, once a turn finally completes.
+    "The result has already been shown to the user. Do not repeat it. Reply with nothing.",
   ].join(NLc)
 }
 
