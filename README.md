@@ -120,7 +120,7 @@ startup with *"missing package.json or index file"*.
 **2. The GitHub tag** — version-pinned, no registry involved:
 
 ```jsonc
-{ "plugin": ["github:tespio/opencode-fetch-proxy#v1.0.6"] }
+{ "plugin": ["github:tespio/opencode-fetch-proxy#v1.0.7"] }
 ```
 
 Pin the tag: without a tag the spec follows the default branch, so a later commit silently changes
@@ -128,7 +128,7 @@ what you install. If the git spec does not resolve in your build, fetch the sing
 use route 1:
 
 ```
-https://raw.githubusercontent.com/tespio/opencode-fetch-proxy/v1.0.6/index.js
+https://raw.githubusercontent.com/tespio/opencode-fetch-proxy/v1.0.7/index.js
 ```
 
 The pin above is the version this README was written against — check
@@ -168,15 +168,26 @@ options?: {
 };
 ```
 
-### `set-proxy` — configure it from outside the session
+### `set-proxy` — a form, from outside the session
 
-The reliable way to configure the **first** proxy, because it needs no model:
+The reliable way to configure the **first** proxy, because it needs no model. Run it with no
+arguments and it opens a form in your browser:
 
 ```bash
-npx opencode-fetch-proxy-set http://192.168.10.101:3128
+npx opencode-fetch-proxy-set
+```
+
+It lists every provider it found in `opencode.jsonc` — endpoint, current mapping, model count — with
+one field for the proxy URL. Pick a provider, paste the URL, save. That writes
+`proxy-providers.json`, the same file `/proxy` writes. The local server exits as soon as you submit,
+so nothing is left running.
+
+For scripts, the command-line form still works:
+
+```bash
+npx opencode-fetch-proxy-set http://192.168.10.101:3128 --provider 063
 npx opencode-fetch-proxy-set --list          # what is configured, and which providers exist
 npx opencode-fetch-proxy-set --remove        # clear it
-npx opencode-fetch-proxy-set --provider 063 http://192.168.10.101:3128
 npx opencode-fetch-proxy-set --file          # print the mapping file path
 ```
 

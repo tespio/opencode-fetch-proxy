@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.7
+
+`set-proxy` now opens a browser form when run without arguments.
+
+1.0.6 shipped a command-line setter, which is not an accessible way to configure a proxy: it
+requires a terminal, a path to the script, and remembering `--provider` flags. Running it with no
+arguments now serves a small local page instead, listing every provider it found in
+`opencode.jsonc` with its endpoint, current mapping and model count, and one field for the proxy
+URL. Saving writes the same `proxy-providers.json`.
+
+The server binds to 127.0.0.1 on an ephemeral port, opens the default browser, and exits as soon
+as the form is submitted, so no process is left behind. An invalid URL is rejected in the page and
+nothing is written.
+
+The command-line form is unchanged and still available for scripts.
+
 ## 1.0.6
 
 Add `set-proxy.js`, because `/proxy` cannot bootstrap the model it is meant to configure.
