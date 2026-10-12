@@ -99,8 +99,15 @@ function commandFilePath() {
 function helperScriptPath() {
   try {
     const here = path.dirname(fileURLToPath(import.meta.url))
-    const candidate = path.join(here, "set-proxy.js")
-    return fs.existsSync(candidate) ? candidate : ""
+    // lib/ first. The discovery glob is {plugin,plugins}/*.{ts,js} -- a single path segment,
+    // never a directory -- so a subdirectory is never imported as a plugin. Shipping the helper
+    // as a direct sibling put it INSIDE that glob, and OpenCode imported it at every startup: it
+    // has no exports, so its CLI top level ran and opened the browser form on each launch.
+    const candidates = [path.join(here, "lib", "set-proxy.js"), path.join(here, "set-proxy.js")]
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) return candidate
+    }
+    return ""
   } catch {
     return ""
   }

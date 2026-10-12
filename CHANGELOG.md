@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.0.11
+
+Stop the helper script being loaded as a plugin.
+
+OpenCode discovers plugins with the glob `{plugin,plugins}/*.{ts,js}` -- every direct `.js` child
+of a plugin directory is imported. 1.0.6 through 1.0.10 told users to copy `set-proxy.js` next to
+the plugin, which put it inside that glob. It has no exports, so importing it ran its CLI top
+level, and that opened the browser form at every startup.
+
+Two fixes, because either alone would be fragile:
+
+1. `set-proxy.js` now checks whether it was executed or imported (`process.argv[1]` against its
+   own path) and does nothing at all when imported. This holds wherever the file ends up.
+2. The helper belongs in a `lib/` subdirectory, which the single-segment glob never matches. The
+   plugin resolves `lib/set-proxy.js` first and falls back to a sibling for compatibility.
+
+The last three releases of this command were each broken in a way the handler tests could not
+see, because the failures were all in the integration: undici not importing, `echo` under cmd.exe,
+and now plugin discovery. The handler was always fine.
+
 ## 1.0.10
 
 Fix the `/proxy` command on Windows, which 1.0.9 got wrong.
