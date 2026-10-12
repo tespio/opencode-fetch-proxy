@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.0.21
+
+Arm the local answer last, not first.
+
+1.0.20 answered the /proxy turn in-process, but armed it at the top of the command hook -- before
+the hook own `await client.session.prompt({ noReply: true })`. That post is an HTTP request to the
+OpenCode server, so the stub intercepted it instead. The runtime log showed it plainly:
+
+```
+[fetch-proxy] http://127.0.0.1:32831/session/ses_.../message -> answered locally
+```
+
+An OpenAI chat completion returned where the session-message endpoint was expected. `noReply`
+never reached the server, so the turn ran for real and the model replied with generic greetings.
+
+The arming now happens at the very end of the hook, once every request the hook makes itself has
+completed. The first request to arrive afterwards is necessarily the model call.
+
+Tested with a real local HTTP server standing in for the OpenCode server: the noReply post must
+reach it, and the subsequent model request must be answered locally in about a millisecond.
+
 ## 1.0.20
 
 Answer the /proxy turn in-process, so it cannot hang or fail.

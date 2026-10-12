@@ -1193,9 +1193,6 @@ set_proxy: buildSetProxyTool(toolHelper, proxyState, persistProxyProviders, () =
      * The hook runs after shell expansion and before the model call.
      */
     "command.execute.before": async (input, output) => {
-      // Arm the local answer. The turn is already being issued by the time this runs and it
-      // cannot be cancelled, so make its request succeed locally and instantly.
-      armLocalAnswer()
       const hookLog = (msg) => {
         try {
           fs.appendFileSync(
@@ -1265,6 +1262,12 @@ set_proxy: buildSetProxyTool(toolHelper, proxyState, persistProxyProviders, () =
         output.parts.push(...kept)
         hookLog("after filter: partsLen=" + output.parts.length + " kept=" + JSON.stringify(kept)?.slice(0, 200))
       }
+
+      // Arm LAST. This hook makes its own HTTP call to the server to post the result with
+      // noReply, and the local answer must not intercept that -- it is meant for the model
+      // request, which is issued after this hook returns. Arming earlier swallowed the post,
+      // so noReply never reached the server and the real turn ran.
+      armLocalAnswer()
     },
 
     /**
