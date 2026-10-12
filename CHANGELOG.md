@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.0.9
+
+`/proxy` now works with no reachable model. This removes the deadlock entirely.
+
+A slash command whose body is a prompt still needs a model turn to run its tool, which is why
+`/proxy` could never configure the only provider -- that provider is unreachable until configured.
+But the server expands `` !`cmd` `` in a command template with a real shell BEFORE it calls the
+model: `SessionPrompt.command` collects `shellMatches`, runs them, substitutes the output, and only
+then calls `prompt()`. A command can therefore have a side effect with no turn at all.
+
+The generated command is now:
+
+```
+!`echo $ARGUMENTS | node <set-proxy.js> proxy-cmd`
+```
+
+Nothing the user types reaches the command line -- the payload goes over stdin -- so there is no
+quoting to get wrong and no metacharacter to escape. The script path uses forward slashes because
+the string is handed to a real shell.
+
+`/proxy <url>`, `/proxy remove`, `/proxy list` and bare `/proxy` all run this way. It falls back to
+the previous prompt-template form when `set-proxy.js` is not beside the plugin, so single-file
+installs keep working.
+
+Also documented: OpenCode natively honours `HTTP_PROXY` / `http_proxy` via
+`http.setGlobalProxyFromEnv()` and already exempts loopback itself. That is a global, not
+per-provider, route -- but it is zero-config and needs no plugin at all.
+
 ## 1.0.8
 
 Check and repair the model id, which is what produced `The model \`063\` does not exist`.

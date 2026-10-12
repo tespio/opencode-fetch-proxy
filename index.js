@@ -31,6 +31,7 @@ import tls from "node:tls"
 import os from "node:os"
 import path from "node:path"
 import { Readable } from "node:stream"
+import { fileURLToPath } from "node:url"
 
 const MARKER = Symbol.for("opencode.fetch.proxy.installed")
 
@@ -91,12 +92,62 @@ function commandFilePath() {
   return path.join(configDir(), "command", "proxy.md")
 }
 
-const PROXY_COMMAND_BODY = [
+/**
+ * Where set-proxy.js lives, if it shipped alongside this file. Bundling it is what lets the
+ * /proxy command do real work without a model turn, so its absence matters and is reported.
+ */
+function helperScriptPath() {
+  try {
+    const here = path.dirname(fileURLToPath(import.meta.url))
+    const candidate = path.join(here, "set-proxy.js")
+    return fs.existsSync(candidate) ? candidate : ""
+  } catch {
+    return ""
+  }
+}
+
+/**
+ * The /proxy command, as a SHELL-BACKED command rather than a prompt template.
+ *
+ * Why this shape: a slash command whose body is a prompt still needs a model turn to run its
+ * tool, so it cannot configure the only provider -- that provider is unreachable until
+ * configured. But the server expands `!`...`` in a command template with a real shell BEFORE it
+ * calls the model (SessionPrompt.command: shellMatches -> prompt()). So a command can have a
+ * side effect with no turn at all. That is the whole trick.
+ *
+ * Nothing the user types reaches the command line: the only variable text is a base64 payload,
+ * and base64 cannot contain a shell metacharacter or require quoting. decode happens in the
+ * script, which reads stdin.
+ *
+ * Falls back to the prompt-template form when set-proxy.js is not beside this file, so a
+ * single-file install still behaves as before instead of breaking.
+ */
+function proxyCommandBody() {
+  const helper = helperScriptPath()
+  if (!helper) return PROMPT_TEMPLATE_BODY
+  const NLc = String.fromCharCode(10)
+  // Forward slashes, not JSON.stringify's backslashes: this string is handed to a real shell, and
+  // a Windows path in backslashes loses them to escape processing ("C:\U..." -> "C:U...").
+  const quoted = '"' + helper.replace(/\\/g, "/") + '"'
+  return [
+    "---",
+    "description: Set or remove the HTTP proxy for one provider (works with no reachable model)",
+    "---",
+    "!`echo $ARGUMENTS | node " + quoted + " proxy-cmd`",
+    "",
+    "Report the result above, then stop.",
+  ].join(NLc)
+}
+
+/** The original prompt-template form, used only when set-proxy.js is unavailable. */
+const PROMPT_TEMPLATE_BODY = [
   "---",
   "description: Set or remove the HTTP proxy for one provider",
   "---",
   "Run set_proxy once with these arguments, then reply with its output and nothing else: $ARGUMENTS",
 ].join(String.fromCharCode(10))
+
+const PROXY_COMMAND_BODY = PROMPT_TEMPLATE_BODY
 
 // Kept short on purpose: this template is shown in the transcript, so a verbose one
 // produces a wall of text on every use. Guidance belongs in the tool description.
@@ -104,6 +155,7 @@ const PROXY_COMMAND_BODY = [
 /** Writes the command file if absent or out of date. Never throws. */
 function ensureProxyCommandFile() {
   const file = commandFilePath()
+  const want = proxyCommandBody()
   try {
     let existing = ""
     try {
@@ -111,9 +163,9 @@ function ensureProxyCommandFile() {
     } catch {
       /* not there yet */
     }
-    if (existing.trim() === PROXY_COMMAND_BODY.trim()) return { file, action: "unchanged" }
+    if (existing.trim() === want.trim()) return { file, action: "unchanged" }
     fs.mkdirSync(path.dirname(file), { recursive: true })
-    fs.writeFileSync(file, PROXY_COMMAND_BODY + "\n", "utf8")
+    fs.writeFileSync(file, want + "\n", "utf8")
     return { file, action: existing ? "updated" : "created" }
   } catch (err) {
     return { file, action: "failed", error: String(err && err.message ? err.message : err) }

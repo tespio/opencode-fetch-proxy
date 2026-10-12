@@ -410,6 +410,128 @@ async function describeModels(provider) {
   return { ok: true, text: 'Model ids look right. <strong>' + esc(provider.id) + '</strong> serves ' + listed + '.' }
 }
 
+
+/**
+ * Entry point for the in-app /proxy command.
+ *
+ * The plugin writes a command whose template runs:
+ *     echo <base64> | node <this file> proxy-cmd
+ * The server expands that with the real shell BEFORE it calls the model, so this runs even when
+ * the provider is unreachable and no turn can complete. Nothing user-supplied is on the command
+ * line: the payload is base64, so there is no quoting to get wrong and no metacharacter to escape.
+ *
+ * Recognised input:
+ *     <proxyURL>              set the proxy for the provider that needs one
+ *     remove | off | clear    remove it
+ *     list | show             print current state
+ *     (anything else)         usage
+ */
+function runProxyCommand() {
+  let raw = ''
+  try {
+    raw = fs.readFileSync(0, 'utf8')
+  } catch {
+    /* no stdin */
+  }
+
+  // stdin arrives from the command's shell expansion, which substitutes $ARGUMENTS verbatim:
+  //     !`echo $ARGUMENTS | node <this file> proxy-cmd`
+  // A base64 payload is also accepted, so the generated command can keep the command line free
+  // of anything but shell-inert characters when that matters.
+  let args = raw.trim()
+  if (args && args.length % 4 === 0 && /^[A-Za-z0-9+/]+={0,2}$/.test(args)) {
+    try {
+      const decoded = Buffer.from(args, 'base64').toString('utf8').trim()
+      if (decoded && /^[\x20-\x7e]+$/.test(decoded)) args = decoded
+    } catch {
+      /* keep the raw text */
+    }
+  }
+
+  const cfg2 = readConfig()
+  const cands = proxyCandidates(cfg2)
+  const map = readMapping()
+
+  /** The provider to configure: the only candidate, or the only one not already covered. */
+  const chooseTarget = () => {
+    if (cands.length === 1) return cands[0]
+    const uncovered = cands.filter((c) => !map[c.id])
+    if (uncovered.length === 1) return uncovered[0]
+    return null
+  }
+
+  const target = chooseTarget()
+  const who = target
+    ? target.id + (target.name ? ' (' + target.name + ')' : '')
+    : cands.length
+      ? cands.map((c) => c.id).join(', ')
+      : 'none found'
+
+  const lower = args.toLowerCase()
+
+  // no arguments: report state, which is itself useful
+  if (!args) {
+    const entries = Object.entries(map)
+    const lines = []
+    lines.push(entries.length ? 'Proxy configured:' : 'No proxy configured yet.')
+    for (const [id, e] of entries) {
+      lines.push('  ' + id + ' -> ' + redact(typeof e === 'string' ? e : e?.proxy))
+    }
+    if (!entries.length) {
+      lines.push('')
+      lines.push('Usage:  /proxy <proxyURL>      route ' + who + ' through a proxy')
+      lines.push('        /proxy remove          undo it')
+    }
+    return lines.join('\n')
+  }
+
+  if (lower === 'remove' || lower === 'off' || lower === 'clear' || lower === 'none') {
+    if (!target) {
+      const ids = Object.keys(map)
+      if (!ids.length) return 'Nothing is configured, so there is nothing to remove.'
+      writeMapping({})
+      return 'Removed the proxy for ' + ids.join(', ') + '. Restart OpenCode.'
+    }
+    if (!map[target.id]) return 'No proxy is set for ' + who + ', so there is nothing to remove.'
+    delete map[target.id]
+    writeMapping(map)
+    return 'Removed the proxy for ' + who + '. Restart OpenCode.'
+  }
+
+  if (lower === 'list' || lower === 'show' || lower === 'status') {
+    const entries = Object.entries(map)
+    return entries.length
+      ? 'Configured: ' + entries.map(([id, e]) => id + ' -> ' + redact(typeof e === 'string' ? e : e?.proxy)).join(', ')
+      : 'Nothing configured. Providers: ' + who
+  }
+
+  const problem = checkProxyUrl(args)
+  if (problem) return problem + '\n\nGot: ' + args
+
+  if (!target) {
+    return (
+      'Cannot tell which provider you mean. Candidates: ' + who + '.' + '\n' +
+      'Set one explicitly with:  opencode-fetch-proxy-set ' + args + ' --provider <id>'
+    )
+  }
+
+  if (target.declared) {
+    return (
+      'Provider ' + who + ' already declares options.proxy in opencode.jsonc, and that takes' + '\n' +
+      'precedence over anything written here. Remove that key first.'
+    )
+  }
+
+  map[target.id] = { proxy: args }
+  writeMapping(map)
+  return (
+    'Proxy set for ' + who + '.' + '\n' +
+    '  ' + redact(args) + '\n' +
+    '  written to ' + mappingFile + '\n' +
+    'Restart OpenCode for it to take effect.'
+  )
+}
+
 // ---------------------------------------------------------------------- args
 
 const argv = process.argv.slice(2)
@@ -421,6 +543,11 @@ const value = (n) => {
 const positional = argv.filter(
   (a, i) => !a.startsWith('--') && argv[i - 1] !== '--provider' && argv[i - 1] !== '--model',
 )
+
+if (argv[0] === 'proxy-cmd') {
+  console.log(runProxyCommand())
+  process.exit(0)
+}
 
 if (flag('--file')) {
   console.log(mappingFile)
