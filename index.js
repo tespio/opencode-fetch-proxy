@@ -1114,7 +1114,7 @@ set_proxy: buildSetProxyTool(toolHelper, proxyState, persistProxyProviders, () =
      *   const result = yield* prompt({ ..., parts })
      * The hook runs after shell expansion and before the model call.
      */
-    "command.execute.before": async (input) => {
+    "command.execute.before": async (input, output) => {
       if (str(input?.command) !== "proxy") return
       const sessionID = str(input?.sessionID)
       if (!sessionID) return
@@ -1146,6 +1146,12 @@ set_proxy: buildSetProxyTool(toolHelper, proxyState, persistProxyProviders, () =
       } catch (err) {
         log(`[fetch-proxy] could not post the command result: ${err && err.message ? err.message : err}`)
       }
+
+      // Drop the command message itself. The result is already in the transcript as its own
+      // message, so submitting these parts would only start a model turn whose entire job is to
+      // say nothing -- and which cannot complete at all when the command has just disconnected
+      // the provider. A local command does not need a model.
+      if (output && Array.isArray(output.parts)) output.parts.length = 0
     },
 
     /**

@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.0.17
+
+Stop `/proxy` starting a model turn at all.
+
+The command is local: it writes a mapping. Involving a model was wrong in three ways. It showed
+"Thinking..." for a command that had already finished; it could not complete at all after
+`/proxy remove` disconnected the only reachable provider; and when it did complete, the model
+either echoed the result a second time or had nothing to say.
+
+`command.execute.before` receives the parts the command is about to submit. The hook now clears
+them, after posting the result as its own `noReply` message. There is nothing left for a turn to
+do, so no request is made.
+
+Ordering in the hook matters and is deliberate: post the result first, then empty the parts. If it
+emptied them first, the transcript would gain no message at all when the post failed.
+
+The command template no longer instructs the model to report anything, because there is no longer
+a model in the path to instruct.
+
 ## 1.0.16
 
 Stop the /proxy result appearing twice.

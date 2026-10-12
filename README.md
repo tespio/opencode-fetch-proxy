@@ -120,7 +120,7 @@ startup with *"missing package.json or index file"*.
 **2. The GitHub tag** — version-pinned, no registry involved:
 
 ```jsonc
-{ "plugin": ["github:tespio/opencode-fetch-proxy#v1.0.16"] }
+{ "plugin": ["github:tespio/opencode-fetch-proxy#v1.0.17"] }
 ```
 
 Pin the tag: without a tag the spec follows the default branch, so a later commit silently changes
@@ -128,7 +128,7 @@ what you install. If the git spec does not resolve in your build, fetch the sing
 use route 1:
 
 ```
-https://raw.githubusercontent.com/tespio/opencode-fetch-proxy/v1.0.16/index.js
+https://raw.githubusercontent.com/tespio/opencode-fetch-proxy/v1.0.17/index.js
 ```
 
 The pin above is the version this README was written against — check
