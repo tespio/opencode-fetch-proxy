@@ -120,7 +120,7 @@ startup with *"missing package.json or index file"*.
 **2. The GitHub tag** — version-pinned, no registry involved:
 
 ```jsonc
-{ "plugin": ["github:tespio/opencode-fetch-proxy#v1.0.23"] }
+{ "plugin": ["github:tespio/opencode-fetch-proxy#v1.0.24"] }
 ```
 
 Pin the tag: without a tag the spec follows the default branch, so a later commit silently changes
@@ -128,7 +128,7 @@ what you install. If the git spec does not resolve in your build, fetch the sing
 use route 1:
 
 ```
-https://raw.githubusercontent.com/tespio/opencode-fetch-proxy/v1.0.23/index.js
+https://raw.githubusercontent.com/tespio/opencode-fetch-proxy/v1.0.24/index.js
 ```
 
 The pin above is the version this README was written against — check
@@ -206,6 +206,11 @@ happens during a session, so the change applies to the next request.
 /proxy remove                     undo it for the current provider
 /proxy list                       show what is configured
 ```
+
+![Removing the proxy for one provider, with no model turn](docs/proxy-removed.png)
+
+*Both messages appear immediately, in one turn, with no model reply between them — the plugin posts
+the result itself and answers the command's turn locally. Reproduced from a real session.*
 
 **This works with no reachable model**, which matters because the situation `/proxy` exists for is
 exactly the one where the provider is unreachable. Three mechanisms make that possible, and they are

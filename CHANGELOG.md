@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.24
+
+Add a screenshot of the command working.
+
+It is a real session, showing `/proxy remove` and then `/proxy <url>`: both results appear
+immediately, with no model reply between them. That is the property this command took some effort
+to get right, so a picture of it is more useful than another paragraph describing it.
+
+Shipped in `docs/` and listed in `files`, because the README is also rendered on npm -- an image
+the package does not carry would be a broken link there. The reference is relative (`docs/...`); a
+leading slash would be root-absolute and break on both GitHub and npm.
+
+Downscaled to half resolution: 52 KB rather than 101 KB. It is a transcript, so legibility survives
+the reduction and the package stays small.
+
 ## 1.0.23
 
 Remove the debugging instrumentation.
