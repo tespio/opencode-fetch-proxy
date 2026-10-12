@@ -148,16 +148,28 @@ options?: {
 /proxy remove                     undo it for the current provider
 ```
 
-The provider id can be omitted because the session already knows which provider it is using: a
-`chat.params` hook records the active provider before each model request, and the command applies
-to it. Writes `~/.config/opencode/proxy-providers.json` and applies immediately — no restart.
+The provider id can be omitted. A `chat.params` hook records the active provider before each model
+request, and the command applies to it. When no request has succeeded yet — a brand-new session
+whose selected provider is not reachable — the command falls back to the provider declared in
+`opencode.jsonc`, **provided there is exactly one** non-loopback provider. It will not guess between
+several. Writes `~/.config/opencode/proxy-providers.json` and applies immediately — no restart.
 
-**Read this before relying on it: `/proxy` cannot configure the only model you have.** A slash
-command is a prompt template, so pressing enter submits a **model turn** — and if that turn runs
-on the gated provider, it times out before the tool can write anything. `/proxy` needs a working
-model in order to make a model work. With at least one directly-reachable model available, switch
-to it, run `/proxy`, then switch back. If the gated provider is your only provider, use
-`options.proxy` instead.
+The intended flow therefore works without any bootstrap trick:
+
+1. Add a custom provider whose endpoint is reachable only through the proxy.
+2. Open a session and select its model. Requests fail — there is no route yet.
+3. Run `/proxy <proxyURL>`. The tool resolves the provider and writes the mapping.
+4. The provider works from that point on.
+
+Two cases still need care:
+
+- **Several providers configured, none proxied yet.** The fallback cannot know which one you mean,
+  so `/proxy` replies *"send one message first"*. Name it explicitly once —
+  `/proxy <providerID> <proxyURL>` — and the shorthand works afterwards.
+- **`options.proxy` is set on the provider.** That declaration wins over anything `/proxy` writes,
+  and `/proxy remove` cannot delete it. The command detects this and tells you where the proxy
+  actually lives, rather than reporting that none is configured. Delete the key from
+  `opencode.jsonc` if you want `/proxy` to be in charge.
 
 ### Password-protected proxies
 

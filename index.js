@@ -125,6 +125,70 @@ function ensureProxyCommandFile() {
  * report a proxy it does not own. Deliberately tolerant: this only needs to find a string,
  * not to parse JSONC properly, and any failure returns an empty string.
  */
+/**
+ * The single non-loopback provider declared in the config, or "" when there is not exactly
+ * one. Used so /proxy works on the first try in a fresh session, where the selected provider
+ * is not yet known but is also not in question.
+ */
+function soleProviderID() {
+  const dir = configDir()
+  for (const name of ["opencode.jsonc", "opencode.json"]) {
+    try {
+      const text = fs.readFileSync(path.join(dir, name), "utf8")
+      const stripped = text
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^[ \t]*\/\/.*$/gm, "")
+      const parsed = JSON.parse(stripped)
+      const providers = parsed && parsed.provider
+      if (!providers || typeof providers !== "object") continue
+      const usable = []
+      for (const [id, p] of Object.entries(providers)) {
+        const base = str(p?.options?.baseURL) || str(p?.settings?.baseURL) || str(p?.api)
+        if (!base) continue
+        let host = ""
+        try {
+          host = new URL(base).hostname.toLowerCase()
+        } catch {
+          // An unparseable baseURL disqualifies this candidate but must not abort the scan.
+          continue
+        }
+        if (isLoopback(host)) continue
+        usable.push(id)
+      }
+
+      if (usable.length === 1) return usable[0]
+      return ""
+    } catch {
+      /* not strict JSON, or unreadable: give up rather than guess */
+    }
+  }
+  return ""
+}
+
+/**
+ * Display name of the first model on a provider, from config. Used only to label output when
+ * the session has not supplied a name yet.
+ */
+function soleProviderModel(id) {
+  const dir = configDir()
+  for (const name of ["opencode.jsonc", "opencode.json"]) {
+    try {
+      const text = fs.readFileSync(path.join(dir, name), "utf8")
+      const stripped = text
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^[ \t]*\/\/.*$/gm, "")
+      const p = JSON.parse(stripped)?.provider?.[id]
+      const models = p?.models
+      if (!models || typeof models !== "object") return ""
+      const first = Object.values(models)[0]
+      return str(first?.name) || str(Object.keys(models)[0])
+    } catch {
+      /* try the next candidate */
+    }
+  }
+  return ""
+}
+
 function readDeclaredProxy() {
   const dir = configDir()
   for (const name of ["opencode.jsonc", "opencode.json"]) {
@@ -536,12 +600,25 @@ function buildSetProxyTool(toolHelper, state, persist, getRegistry, readDeclared
     // The model is already selected, so the user should not have to look up its id.
     const providerID = str(args.providerID) || str(state.currentProviderID)
 
+    // Fall back to the only provider there is. In a fresh session /proxy cannot know which
+    // provider is selected -- chat.params has not fired for a successful turn yet -- but if
+    // exactly one non-loopback provider is configured, the answer is unambiguous.
+    // If we fell back to the sole provider, its configured model name is the best available
+    // label -- the session has not told us one yet.
+    const sole = soleProviderID()
+    const resolvedID = providerID || sole
+    const soleModel = !providerID && sole ? soleProviderModel(sole) : ""
+
     // Prefer a human label. The provider id is an opaque key like "063"; the model name
     // is what the user recognises in the model picker.
-    const model = str(args.model) || str(state.currentModelName) || str(state.currentModelID)
+    const model =
+      str(args.model) ||
+      str(state.currentModelName) ||
+      str(state.currentModelID) ||
+      soleModel
     const providerLabel = model
-      ? model + " (provider " + providerID + ")"
-      : "provider " + providerID
+      ? model + " (provider " + resolvedID + ")"
+      : "provider " + resolvedID
     const all = Object.entries(state.byProvider)
       .map(([k, v]) => {
         const label = mappingModel(v)
@@ -549,13 +626,13 @@ function buildSetProxyTool(toolHelper, state, persist, getRegistry, readDeclared
       })
       .join("; ")
 
-    if (!providerID) {
+    if (!resolvedID) {
       return {
         title: "Proxy: no provider yet",
         output:
           "I cannot tell which provider you mean yet. **Send one message first** so a " +
           "provider is chosen, or name it explicitly:" + NL + NL +
-          "```" + NL + "/proxy <providerID> <proxyURL>" + NL + "```" + NL + NL +
+          "```" + NL + "/proxy <resolvedID> <proxyURL>" + NL + "```" + NL + NL +
           "Already configured: " + (all || "nothing yet"),
       }
     }
@@ -566,7 +643,7 @@ function buildSetProxyTool(toolHelper, state, persist, getRegistry, readDeclared
       // precedence over this mapping and the tool cannot remove it, so report it rather
       // than claiming nothing is configured while traffic is plainly being proxied.
       const alsoDeclared = readDeclaredProxy()
-      if (!mappingProxy(state.byProvider[providerID])) {
+      if (!mappingProxy(state.byProvider[resolvedID])) {
         return {
           title: alsoDeclared ? "Proxy: declared in config" : "Proxy: nothing to remove",
           output: alsoDeclared
@@ -581,7 +658,7 @@ function buildSetProxyTool(toolHelper, state, persist, getRegistry, readDeclared
               NL + NL + "Configured: " + (all || "nothing yet"),
         }
       }
-      delete state.byProvider[providerID]
+      delete state.byProvider[resolvedID]
       persist()
       const left = Object.keys(state.byProvider)
       return {
@@ -603,7 +680,7 @@ function buildSetProxyTool(toolHelper, state, persist, getRegistry, readDeclared
           "I need a proxy URL to work with." + NL + NL +
           "```" + NL +
           "/proxy <proxyURL>                 configure the current provider" + NL +
-          "/proxy <providerID> <proxyURL>" + NL +
+          "/proxy <resolvedID> <proxyURL>" + NL +
           "/proxy remove                      undo it" + NL +
           "```" + NL + NL +
           "Example: `/proxy http://192.168.10.101:3128`" +
@@ -646,7 +723,7 @@ function buildSetProxyTool(toolHelper, state, persist, getRegistry, readDeclared
       }
     }
 
-    state.byProvider[providerID] = model ? { proxy, model } : { proxy }
+    state.byProvider[resolvedID] = model ? { proxy, model } : { proxy }
     persist()
 
     // Probe once, bounded, so the user learns immediately whether the proxy actually
@@ -654,7 +731,7 @@ function buildSetProxyTool(toolHelper, state, persist, getRegistry, readDeclared
     // provider+proxy, and never allowed to fail the write.
     let probeLine = ""
     try {
-      const cacheKey = providerID + "|" + proxy
+      const cacheKey = resolvedID + "|" + proxy
       if (!state.probe.has(cacheKey)) {
         let outcome
         try {
@@ -693,7 +770,7 @@ function buildSetProxyTool(toolHelper, state, persist, getRegistry, readDeclared
       probeLine = ""
     }
 
-    const others = Object.keys(state.byProvider).filter((k) => k !== providerID)
+    const others = Object.keys(state.byProvider).filter((k) => k !== resolvedID)
     return {
       title: "Proxy set",
       output:
@@ -715,13 +792,13 @@ function buildSetProxyTool(toolHelper, state, persist, getRegistry, readDeclared
         "must be reached through a proxy, e.g. a LAN model server behind a corporate proxy. " +
         "Applies to that provider ONLY; every other provider keeps connecting directly." +
         "\n\nArguments come from the /proxy command and may be: a bare proxy URL " +
-        "(configure the provider this session is already using -- omit providerID and the " +
+        "(configure the provider this session is already using -- omit resolvedID and the " +
         "tool resolves it); a provider id followed by a URL; or the word remove. Call this " +
         "tool exactly once, then reply with its output verbatim and add nothing of your own." +
         "\n\nWith no proxy and no remove flag it returns usage help, which is the correct " +
         "response to a bare /proxy.",
       args: {
-        providerID: z
+        resolvedID: z
           .string()
           .optional()
           .describe("Which provider to configure. Omit to use this session provider."),
@@ -896,7 +973,7 @@ export const FetchProxyPlugin = async ({ client } = {}) => {
      * before each model request with the resolved provider and model.
      */
     "chat.params": async (input) => {
-      const id = str(input?.provider?.info?.id) || str(input?.model?.providerID)
+      const id = str(input?.provider?.info?.id) || str(input?.model?.resolvedID)
       if (id) proxyState.currentProviderID = id
       // Keep a human-readable model label too: the provider id is an opaque key like
       // "063", whereas the model name is what the user recognises in the picker.
@@ -928,7 +1005,7 @@ set_proxy: buildSetProxyTool(toolHelper, proxyState, persistProxyProviders, () =
               "already using -- which is almost always what the user wants, since they have " +
               "already selected the model.\n\n" +
               "Forms: /proxy <proxyURL>            (configure the current provider)\n" +
-              "       /proxy <providerID> <proxyURL>\n" +
+              "       /proxy <resolvedID> <proxyURL>\n" +
               "       /proxy remove                 (current provider)\n" +
               "Given: $ARGUMENTS\n\n" +
               "The proxy applies to that provider ONLY; every other provider keeps " +

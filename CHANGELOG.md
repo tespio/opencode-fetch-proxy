@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.0.3
+
+Make `/proxy <url>` work on the first attempt in a fresh session.
+
+Previously the tool needed to be told which provider to configure, and it learned that only from
+`chat.params` -- which fires on a model request. In a new session whose selected provider is not
+yet reachable, the first request fails before the tool can run, so `/proxy` replied "send one
+message first" and the command had to be issued twice.
+
+Now, when exactly one non-loopback provider is configured, that provider is used, so the intended
+flow works immediately: add a provider, select it, run `/proxy <url>`, done.
+
+It still refuses to guess when two or more providers are candidates, and loopback providers are
+never counted. The label also falls back to the provider's configured model name, so the output
+reads `Qwen3.8 27B Uncensored (provider 063)` rather than just the opaque provider id.
+
 ## 1.0.2
 
 Fix a misleading `/proxy remove` result. When a proxy was declared as `options.proxy` in
