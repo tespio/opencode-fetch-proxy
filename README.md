@@ -1,0 +1,334 @@
+# opencode-fetch-proxy
+
+Route one OpenCode provider through an HTTP proxy — without touching the system proxy, and
+without sending your other providers' traffic through it.
+
+Built for a specific, common corporate shape: the workstation is on a VPN, your model server
+sits on the LAN, and the corporate HTTP proxy is the only route to it.
+
+---
+
+## The problem
+
+```
+workstation ──VPN──► [ corporate proxy 192.168.10.101:3128 ] ──LAN──► [ vLLM 192.168.10.86:5005 ]
+        └──────────────────► everything else on the internet: reachable directly
+```
+
+Measured on the machine this was written for:
+
+| Probe | Result |
+| --- | --- |
+| TCP connect to `192.168.10.86:5005` directly | ✗ connect timeout — no route |
+| TCP connect to `192.168.10.101:3128` | ✓ reachable |
+| `CONNECT 192.168.10.86:5005` via the proxy | ✓ `HTTP/1.1 200 Connection established` |
+
+So the proxy is a working path and the direct route is not. OpenCode has no setting for this:
+
+- **Provider settings have no `proxy` field.** `ProviderConfig` is declared
+  `additionalProperties: false`, so a `proxy` key beside `options` fails validation. Only
+  `options` accepts extra keys, and no UI writes there.
+- **No plugin hook can attach a proxy to a request.** The V1 hook surface is `config`,
+  `provider`, `auth`, `event`, `tool`, `dispose`, `chat.message`, `chat.params`,
+  `chat.headers`, `permission.ask`, `tool.execute.*` and `experimental.*`.
+- **`HTTP_PROXY` is not the answer.** It is process-wide rather than per-provider, is honoured
+  inconsistently depending on which HTTP stack runs, and usually breaks OpenCode's own
+  loopback connection unless `NO_PROXY` is also right.
+
+The AI SDK provider packages fall back to the runtime global `fetch` when no `fetch` option is
+supplied. That fallback is the seam this plugin uses.
+
+## What it does
+
+Routes **only the providers you name** through a proxy. Everything else connects directly, so
+your external API traffic never passes through the corporate proxy.
+
+Three ways to configure it, in precedence order:
+
+| # | Where | Scope | Needs a working model? |
+| --- | --- | --- | --- |
+| 1 | `options.proxy` in `opencode.jsonc` | that provider | no |
+| 2 | the `/proxy` command | the session's provider | **yes** |
+| 3 | `proxy` in `proxy.json` | `targets`, or every provider when opted in | no |
+
+```jsonc
+// Option 1 — most reliable
+{
+  "provider": {
+    "063": {
+      "npm": "@ai-sdk/openai-compatible",
+      "options": {
+        "baseURL": "http://192.168.10.86:5005/v1",
+        "proxy": "http://192.168.10.101:3128"
+      }
+    }
+  }
+}
+```
+
+```
+# Option 2 — from inside a session
+/proxy http://192.168.10.101:3128
+/proxy remove
+```
+
+## Install
+
+**One file, no config change.** Drop the module into OpenCode's global plugin directory:
+
+```
+~/.config/opencode/plugins/opencode-fetch-proxy.js
+```
+
+OpenCode discovers it at startup. On Windows the path is the same `~/.config/opencode` — it does
+not use `%APPDATA%`.
+
+> **The extension matters.** The discovery glob is exactly `{plugin,plugins}/*.{ts,js}`: direct
+> children only, no recursion, and **`.mjs` is not matched**. A `.mjs` plugin in that directory
+> is skipped silently. Name it `.js`, or declare it explicitly.
+
+Three routes, in order of how much can go wrong:
+
+**1. Path to the file** — any extension, any location, nothing downloaded:
+
+```jsonc
+{ "plugin": ["C:/Users/you/.config/opencode/plugins/opencode-fetch-proxy.js"] }
+```
+
+**2. The GitHub tag** — version-pinned, no registry involved:
+
+```jsonc
+{ "plugin": ["github:tespio/opencode-fetch-proxy#v1.0.0"] }
+```
+
+Pin the tag: without `#v1.0.0` the spec follows the default branch, so a later commit silently
+changes what you install. If the git spec does not resolve in your build, fetch the single file
+instead and use route 1:
+
+```
+https://raw.githubusercontent.com/tespio/opencode-fetch-proxy/v1.0.0/index.js
+```
+
+**3. npm** — one line, and the only route that updates itself:
+
+```jsonc
+{ "plugin": ["@init3/opencode-fetch-proxy"] }
+```
+
+A bare package name is rewritten to `@latest` and installed automatically at startup with npm's
+Arborist into `~/.cache/opencode/packages/`.
+
+> **Use `plugin`, not `plugins`.** The V2 key `plugins` is discarded when config is lowered to the
+> V1 shape — logged as `configuration compatibility diagnostic ... kind=unsupported` and otherwise silent.
+> If the plugin does not load, try the other key.
+
+## Configure
+
+### `options.proxy` — declare it on the provider
+
+The most reliable option, and the only one that works when the gated provider is your *only*
+provider. See the snippet above.
+
+`options` is the only schema-legal location: `ProviderConfig` is `additionalProperties: false`,
+while `options` is an open record — the generated SDK type confirms it:
+
+```ts
+options?: {
+    apiKey?: string;
+    baseURL?: string;
+    [key: string]: unknown | string | boolean | (number | false) | undefined;
+};
+```
+
+### `/proxy` — configure it from inside a session
+
+```
+/proxy <proxyURL>                 configure the provider this session is using
+/proxy <providerID> <proxyURL>    configure a specific provider
+/proxy remove                     undo it for the current provider
+```
+
+The provider id can be omitted because the session already knows which provider it is using: a
+`chat.params` hook records the active provider before each model request, and the command applies
+to it. Writes `~/.config/opencode/proxy-providers.json` and applies immediately — no restart.
+
+**Read this before relying on it: `/proxy` cannot configure the only model you have.** A slash
+command is a prompt template, so pressing enter submits a **model turn** — and if that turn runs
+on the gated provider, it times out before the tool can write anything. `/proxy` needs a working
+model in order to make a model work. With at least one directly-reachable model available, switch
+to it, run `/proxy`, then switch back. If the gated provider is your only provider, use
+`options.proxy` instead.
+
+### Password-protected proxies
+
+Basic-auth proxies are supported by putting the credentials in the URL:
+
+```
+/proxy http://user:password@192.168.10.101:3128
+```
+
+or in config:
+
+```jsonc
+"proxy": "http://user:password@192.168.10.101:3128"
+```
+
+**Percent-encode special characters.** A backslash in the username — the usual
+`DOMAIN\user` form — parses "successfully" as a URL while silently **dropping the credentials**,
+so the proxy is contacted with no authentication and you get a confusing 407. The plugin detects
+this and refuses with instructions rather than letting it fail obscurely:
+
+```
+/proxy http://DOMAIN%5Cuser:p%40ssword@192.168.10.101:3128
+```
+
+Also encode `@` as `%40` and `: ` as `%3A` in a password.
+
+**Passwords are redacted from everything you see.** Chat output, logs and error messages show
+`http://user:REDACTED@host:port`. The username is kept, since it is what you need when
+diagnosing a 407.
+
+**But the password is stored in plaintext** in `proxy-providers.json` (or `opencode.jsonc`).
+That is unavoidable — the proxy needs the credential — but it means:
+
+- the file is exactly as sensitive as the password itself
+- it is gitignored by the `.gitignore` OpenCode writes into its config directory, which is worth
+  confirming if you keep that directory in version control
+- prefer a proxy account with no other privileges
+
+### `proxy.json` — a global proxy
+
+```json
+{
+  "proxy": "http://192.168.10.101:3128",
+  "targets": ["192.168.10.86:5005"],
+  "log": true
+}
+```
+
+`targets` covers hosts that are **not** provider endpoints. To route every provider through the
+global proxy instead, opt in explicitly:
+
+```json
+{ "proxy": "http://192.168.10.101:3128", "routeAllProviders": true }
+```
+
+This is **off by default on purpose.** In the usual corporate setup, blanket routing would make
+unrelated providers depend on the corporate proxy and send their traffic through it — an
+unnecessary dependency, and for external API calls a privacy question too.
+
+### Reference
+
+| Key | Where | Meaning |
+| --- | --- | --- |
+| `proxy` | provider `options` (or `settings`) | Proxy for that provider only. |
+| `proxy` | `proxy-providers.json` | Written by `/proxy`. Same effect. |
+| `proxy` | `proxy.json` | Global. Used with `routeAllProviders` or `targets`. |
+| `routeAllProviders` | `proxy.json` | Opt in to routing every non-loopback provider host. |
+| `targets` | `proxy.json` | Extra non-provider hosts to route. |
+| `proxyTargets` / `noProxy` | provider `options` | Explicit hosts for that provider. |
+| `log` | `proxy.json` | Log each proxied request and the chosen transport. |
+
+Environment: `OPENCODE_PROXY_URL`, `OPENCODE_PROXY_TARGETS` (comma-separated),
+`OPENCODE_PROXY_ALL=1`, `OPENCODE_PROXY_LOG=1`.
+
+> Save `proxy.json` as UTF-8 **without a BOM**. A BOM makes `JSON.parse` fail; the plugin logs
+> `bad proxy.json` and stays inactive rather than guessing.
+
+## Loopback is never proxied
+
+`127.0.0.0/8`, `localhost`, `::1`, `0.0.0.0` and `*.localhost` always go direct, and this is not
+configurable. Two reasons:
+
+- OpenCode's own client↔server traffic is loopback. Routing it through a proxy creates a routing
+  loop — the "you must bypass the proxy for this connection" warning in OpenCode's network docs.
+- A proxy reached over the network normally has **no route back to your loopback**, so the request
+  fails with an opaque error (typically `503`) rather than anything actionable.
+
+This was not theoretical: a test that proxied a loopback provider target failed with exactly that
+`503` before the guard existed.
+
+## How it works
+
+No hook can attach a proxy to a provider request, so the plugin wraps the runtime `fetch` that AI
+SDK providers fall back to, and routes only hosts it has a rule for. Rules are keyed by
+`host:port`, and loopback entries are dropped at build time so logs and error messages never
+advertise a target that will in fact go direct.
+
+Two transports, chosen once per proxy URL:
+
+1. **`undici` `ProxyAgent`** when it resolves — handles CONNECT tunnelling and proxy basic-auth
+   for both `http` and `https` targets.
+2. **A manual CONNECT tunnel** otherwise — opens the TCP connection, issues `CONNECT host:port`,
+   negotiates **TLS inside the tunnel** for `https` targets, writes an origin-form HTTP/1.1
+   request, and returns the response as a streamed web `Response`, so SSE streaming survives.
+
+The manual path is a real fallback, not a formality: `undici` is not always importable from a
+plugin directory, and the OpenCode 1.19 desktop runs its server on **Node** (no Bun markers in the
+bundle; `typeof Bun === "undefined"` guards its Bun-only paths).
+
+Commands are shipped as a markdown file at `<config>/command/proxy.md`, written and kept up to
+date by the plugin. A plugin **cannot** register a slash command: the command list is built from
+the `command` config map, markdown files, MCP prompts and skills, and its `source` union has no
+`"plugin"` member.
+
+## Verify it loaded
+
+With `log: true`:
+
+```
+[fetch-proxy] active - per-provider proxies only (options.proxy or /proxy)
+[fetch-proxy] provider "063" -> http://192.168.10.101:3128 (declared on provider) for 192.168.10.86:5005
+[fetch-proxy] GET http://192.168.10.86:5005/v1/models -> http://192.168.10.101:3128
+[fetch-proxy] /proxy command file: created (.../command/proxy.md)
+```
+
+Only providers that actually have a proxy appear in that list. The desktop app writes server
+output to `<appdata>/ai.opencode.desktop/logs/<timestamp>/server.log`; the shared
+`~/.local/share/opencode/log/opencode.log` is not always current.
+
+## Verified behaviour
+
+Exercised against a live proxy and a live LAN target:
+
+| Test | Result |
+| --- | --- |
+| Provider with `options.proxy`, another without | ✓ gated one proxied, other **direct** |
+| `/proxy` sets a mapping | ✓ provider routed, mapping persisted |
+| `/proxy remove` | ✓ provider returns to direct |
+| Unrelated host (`example.com`) | ✓ direct, `200` |
+| Loopback target with a proxy declared | ✓ direct (bypass guard) |
+| `https://` through the CONNECT tunnel | ✓ `200`, TLS and certificate validation intact |
+| Reachability probe | ✓ `reachable` for a live proxy, `unreachable (ECONNREFUSED)` for a dead one |
+| Global proxy **without** `routeAllProviders` | ✓ no blanket routing |
+| `dispose()` | ✓ original `fetch` restored |
+
+## Limitations
+
+- **It patches a global.** It relies on providers falling back to global `fetch`. A package that
+  supplies its own `fetch` or dispatcher cannot be intercepted. Native proxy support in provider
+  settings is the correct long-term fix.
+- **Rules are keyed by host.** Two providers on the same host cannot use different proxies.
+- **`/proxy` needs a working model** to run its turn — see above.
+- **Proxy auth is basic-auth only.** NTLM and Kerberos need an authenticating gateway.
+- **Not a security boundary.** It routes traffic; it does not inspect or block it.
+
+## A design reference for the future
+
+OpenCode has no supported way for a plugin to contribute UI or collect configuration
+interactively. Two related efforts are worth knowing about:
+
+- [#6549](https://github.com/anomalyco/opencode/pull/6549) proposed a declarative Intent
+  abstraction for server→client UI. It was **closed**; the maintainer took a different route.
+- The interactive *question tool* that replaced it ([#7268](https://github.com/anomalyco/opencode/pull/7268),
+  multi-select in [#7386](https://github.com/anomalyco/opencode/pull/7386)) is agent-driven: the
+  model asks during a turn. A plugin cannot raise a form at startup and block on the answer, and
+  the answer lands in the conversation with nowhere durable to put it.
+
+**If plugin-initiated forms with a plugin-owned config store are ever exposed, that becomes the
+right way to collect this value.** `/proxy` is the closest thing available today, and its
+constraint is documented above rather than hidden.
+
+## License
+
+MIT

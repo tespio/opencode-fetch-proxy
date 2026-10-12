@@ -1,0 +1,107 @@
+name: Release
+
+# Publishes to npm when a version tag is pushed:
+#
+#   npm version patch        # bumps package.json AND creates the v1.0.1 tag
+#   git push --follow-tags
+#
+# Authentication uses npm "trusted publishing" (OIDC), so there is NO npm token stored in this
+# repository. Configure it once at:
+#   https://www.npmjs.com/package/opencode-fetch-proxy/settings
+#   -> Trusted Publisher -> GitHub Actions
+#      organization/user : init3
+#      repository        : opencode-fetch-proxy
+#      workflow filename : release.yml
+#
+# Without that configuration the publish step fails with ENEEDAUTH. If you would rather use a
+# token, add it as the NPM_TOKEN secret and replace the step's `run` with:
+#   npm publish --access public --provenance
+# with `NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}` in `env`.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # required for trusted publishing / provenance
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Fail before publishing if the module does not load or its export shape is wrong.
+      # OpenCode skips a plugin whose exports are not functions, and reports nothing.
+      - name: Check syntax
+        run: node --check index.js
+
+      - name: Check the export shape OpenCode requires
+        run: |
+          node -e '
+            import("./index.js").then((m) => {
+              const keys = Object.keys(m);
+              console.log("exports:", keys.join(", "));
+              for (const k of keys) {
+                const v = m[k];
+                const ok = typeof v === "function" || (v && typeof v.server === "function");
+                if (!ok) {
+                  console.error(`export ${k} would fail getLegacyPlugins: not a function or {server}`);
+                  process.exit(1);
+                }
+              }
+              if (!m.default || typeof m.default.server !== "function") {
+                console.error("default export must expose server()");
+                process.exit(1);
+              }
+              if (!m.default.id) {
+                console.error("default export must expose id (required for file plugins)");
+                process.exit(1);
+              }
+              console.log("export shape OK");
+            }).catch((e) => { console.error(e); process.exit(1); });
+          '
+
+      # Confirm the tag matches package.json, so a tag cannot publish the wrong version.
+      - name: Tag matches package.json
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          PKG=$(node -p "require('./package.json').version")
+          TAG=${GITHUB_REF_NAME#v}
+          echo "package.json=$PKG tag=$TAG"
+          [ "$PKG" = "$TAG" ] || { echo "::error::tag $TAG does not match package.json $PKG"; exit 1; }
+
+      - name: Show what will be published
+        run: npm pack --dry-run
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      # Trusted publishing: npm exchanges the workflow's OIDC token for a short-lived
+      # credential. No long-lived secret is stored anywhere.
+      - name: Publish
+        run: npm publish --access public
+
+      - name: Tag the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" --generate-notes || true

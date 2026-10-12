@@ -1,0 +1,40 @@
+{
+  "name": "@init3/opencode-fetch-proxy",
+  "version": "1.0.0",
+  "description": "Route one OpenCode provider through an HTTP proxy — for a LAN model server reachable only via a corporate proxy — without touching the system proxy.",
+  "license": "MIT",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./server": "./index.js"
+  },
+  "files": [
+    "index.js",
+    "README.md"
+  ],
+  "keywords": [
+    "opencode",
+    "opencode-plugin",
+    "proxy",
+    "http-proxy",
+    "corporate",
+    "vpn"
+  ],
+  "author": "init3",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tespio/opencode-fetch-proxy.git"
+  },
+  "bugs": {
+    "url": "https://github.com/tespio/opencode-fetch-proxy/issues"
+  },
+  "homepage": "https://github.com/tespio/opencode-fetch-proxy#readme",
+  "engines": {
+    "node": ">=18",
+    "opencode": ">=1.18.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

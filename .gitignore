@@ -1,0 +1,11 @@
+# Local tooling, not part of the package
+tools/
+
+# Node / npm
+node_modules/
+*.tgz
+
+# Editors and OS
+.DS_Store
+Thumbs.db
+*.log
