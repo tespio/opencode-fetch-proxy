@@ -98,16 +98,22 @@ Three routes, in order of how much can go wrong:
 **2. The GitHub tag** — version-pinned, no registry involved:
 
 ```jsonc
-{ "plugin": ["github:tespio/opencode-fetch-proxy#v1.0.0"] }
+{ "plugin": ["github:tespio/opencode-fetch-proxy#v1.0.3"] }
 ```
 
-Pin the tag: without `#v1.0.0` the spec follows the default branch, so a later commit silently
-changes what you install. If the git spec does not resolve in your build, fetch the single file
-instead and use route 1:
+Pin the tag: without a tag the spec follows the default branch, so a later commit silently changes
+what you install. If the git spec does not resolve in your build, fetch the single file instead and
+use route 1:
 
 ```
-https://raw.githubusercontent.com/tespio/opencode-fetch-proxy/v1.0.0/index.js
+https://raw.githubusercontent.com/tespio/opencode-fetch-proxy/v1.0.3/index.js
 ```
+
+The pin above is the version this README was written against — check
+[releases](https://github.com/tespio/opencode-fetch-proxy/releases) for a newer one, since a pinned
+tag stays where you put it and does not follow updates. The `v1` tag always points at the newest 1.x
+release if you would rather take patch updates automatically, at the cost of not controlling exactly
+which commit you run.
 
 **3. npm** — one line, and the only route that updates itself:
 
