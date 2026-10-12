@@ -74,31 +74,53 @@ Three ways to configure it, in precedence order:
 
 ## Install
 
-**One file, no config change.** Drop the module into OpenCode's global plugin directory:
+**One command, no config change.** Install the package and run its installer:
 
+```bash
+npm install opencode-fetch-proxy
+npx opencode-fetch-proxy-install
 ```
-~/.config/opencode/plugins/opencode-fetch-proxy.js
+
+That copies the plugin to `~/.config/opencode/plugins/opencode-fetch-proxy.js`, creating the
+directory if needed, and refuses to overwrite a file that differs (use `--force` for that). It
+respects `OPENCODE_CONFIG_DIR` and `XDG_CONFIG_HOME`. Run it with `--print` to see the target path
+without writing anything.
+
+OpenCode discovers the file at startup. On Windows the config path is the same
+`~/.config/opencode` — it does not use `%APPDATA%`.
+
+> **The file name is yours to choose; the extension is not.** Discovery globs
+> `{plugin,plugins}/*.{ts,js}`, so the name is irrelevant — only `.js` or `.ts` matches. This
+> package ships the file as `index.js`, so if you are copying it out of a git checkout rather than
+> using the installer, rename it on the way in. **`.mjs` and `.cjs` are silently skipped** in that
+> directory — a `.mjs` plugin there does nothing at all, with no error.
+
+> **A subdirectory is not auto-discovered.** The glob is single-segment: `plugins/anything/index.js`
+> is invisible to it, however it is named. To keep the plugin in its own directory, declare the
+> directory explicitly (route 1 below) — the loader accepts a directory and resolves
+> `index.js` / `index.mjs` inside it, so this is where a `.mjs` name finally works:
+
+```jsonc
+// works: a directory containing index.js or index.mjs
+{ "plugin": ["C:/Users/you/.config/opencode/plugins/opencode-fetch-proxy"] }
 ```
-
-OpenCode discovers it at startup. On Windows the path is the same `~/.config/opencode` — it does
-not use `%APPDATA%`.
-
-> **The extension matters.** The discovery glob is exactly `{plugin,plugins}/*.{ts,js}`: direct
-> children only, no recursion, and **`.mjs` is not matched**. A `.mjs` plugin in that directory
-> is skipped silently. Name it `.js`, or declare it explicitly.
 
 Three routes, in order of how much can go wrong:
 
-**1. Path to the file** — any extension, any location, nothing downloaded:
+**1. Path to the file or its directory** — nothing downloaded, any extension:
 
 ```jsonc
 { "plugin": ["C:/Users/you/.config/opencode/plugins/opencode-fetch-proxy.js"] }
 ```
 
+A path plugin must export `id`; this one does (`id: "fetch-proxy"`), which is why the path route
+works without a `package.json`. A directory with no `package.json` and no index file fails at
+startup with *"missing package.json or index file"*.
+
 **2. The GitHub tag** — version-pinned, no registry involved:
 
 ```jsonc
-{ "plugin": ["github:tespio/opencode-fetch-proxy#v1.0.3"] }
+{ "plugin": ["github:tespio/opencode-fetch-proxy#v1.0.4"] }
 ```
 
 Pin the tag: without a tag the spec follows the default branch, so a later commit silently changes
@@ -106,7 +128,7 @@ what you install. If the git spec does not resolve in your build, fetch the sing
 use route 1:
 
 ```
-https://raw.githubusercontent.com/tespio/opencode-fetch-proxy/v1.0.3/index.js
+https://raw.githubusercontent.com/tespio/opencode-fetch-proxy/v1.0.4/index.js
 ```
 
 The pin above is the version this README was written against — check

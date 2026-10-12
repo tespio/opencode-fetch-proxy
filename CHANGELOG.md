@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.0.4
+
+Ship `install.js`, and document the plugin-discovery rules properly.
+
+The README previously said to place the file at `plugins/opencode-fetch-proxy.js` while the
+package ships it as `index.js`, without saying the name has to change. It also did not mention
+that a subdirectory is never auto-discovered. Both are now stated, with the loader behaviour
+verified against the actual bundle:
+
+- discovery globs `{plugin,plugins}/*.{ts,js}` — single segment, so `plugins/<dir>/index.js` is
+  invisible however it is named, and `.mjs` / `.cjs` are skipped silently
+- an explicitly declared path may point at a directory, which resolves `index.js` / `index.mjs`
+  inside it, so a subdirectory works once declared
+
+New: `npx opencode-fetch-proxy-install` copies the plugin to the right place with the right name,
+creating the directory if needed, and refuses to overwrite a file that differs.
+
 ## 1.0.3
 
 Make `/proxy <url>` work on the first attempt in a fresh session.
