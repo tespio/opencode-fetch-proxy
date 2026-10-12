@@ -1091,6 +1091,61 @@ set_proxy: buildSetProxyTool(toolHelper, proxyState, persistProxyProviders, () =
     },
 
     /**
+     * Deliver the /proxy result as its own message, with NO model turn.
+     *
+     * The command template's shell expansion already ran set-proxy.js, which wrote the outcome to
+     * proxy-last-result.json. Normally that text rides along in the command message and appears
+     * when the turn ends -- but `/proxy remove` disconnects a provider reachable only through the
+     * proxy, so the turn cannot finish and the report never arrives. The user sees "Thinking..."
+     * for as long as it takes them to set a proxy again.
+     *
+     * The SDK exposes `noReply`, which persists a message and skips the model loop:
+     *   if (input.noReply === true) return message
+     *   return yield* loop({ sessionID })
+     * So post the outcome that way: it lands in the transcript immediately, whether or not any
+     * provider is reachable.
+     *
+     * Server-side ordering this relies on:
+     *   const parts = [...uniqueTemplateParts, ...input.parts ?? []]
+     *   yield* plugin.trigger("command.execute.before", { command, sessionID, arguments }, { parts })
+     *   const result = yield* prompt({ ..., parts })
+     * The hook runs after shell expansion and before the model call.
+     */
+    "command.execute.before": async (input) => {
+      if (str(input?.command) !== "proxy") return
+      const sessionID = str(input?.sessionID)
+      if (!sessionID) return
+      if (!client || typeof client.session?.prompt !== "function") return
+
+      const file = path.join(configDir(), "proxy-last-result.json")
+      let text = ""
+      let at = 0
+      try {
+        const parsed = JSON.parse(fs.readFileSync(file, "utf8"))
+        text = str(parsed?.text)
+        at = Number(parsed?.at) || 0
+      } catch {
+        return
+      }
+      // Only report a result this invocation produced, so a stale file is never replayed.
+      if (!text || !at || Date.now() - at > 15000) return
+      try {
+        fs.rmSync(file, { force: true })
+      } catch {
+        /* age-checked next time regardless */
+      }
+
+      try {
+        await client.session.prompt({
+          path: { id: sessionID },
+          body: { parts: [{ type: "text", text }], noReply: true },
+        })
+      } catch (err) {
+        log(`[fetch-proxy] could not post the command result: ${err && err.message ? err.message : err}`)
+      }
+    },
+
+    /**
      * Runs once at startup with the fully resolved config, and again whenever OpenCode
      * re-resolves. Registers the /proxy command and applies proxy rules.
      */

@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.0.15
+
+Report the /proxy result independently of reachability.
+
+The command's shell expansion always ran, so the mapping was always written. But the text was
+delivered as part of the command message, which appears when the model turn ends -- and
+`/proxy remove` disconnects a provider reachable only through the proxy, so the turn could not
+end. The user saw "Thinking..." and nothing else until they happened to set a proxy again.
+
+The result is now also written to `proxy-last-result.json`, and a `command.execute.before` hook
+posts it into the session as its own message with `noReply: true`. The SDK documents that flag
+as:
+
+```js
+if (input.noReply === true) return message;
+return yield* loop({ sessionID });
+```
+
+so the message is persisted and the model loop is skipped entirely. The report arrives whether or
+not any provider is reachable.
+
+The hook only acts on the `proxy` command, consumes the file so a result is never replayed, and
+ignores anything older than 15 seconds. A failure to post is logged and never breaks the turn.
+
+Server-side ordering this depends on, which was verified in the bundle before building on it:
+
+```js
+const parts = [...uniqueTemplateParts, ...input.parts ?? []];
+yield* plugin.trigger("command.execute.before", { command, sessionID, arguments }, { parts });
+const result = yield* prompt({ ..., parts });
+```
+
 ## 1.0.14
 
 Say what `/proxy remove` actually does to reachability.

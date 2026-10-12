@@ -480,6 +480,11 @@ if (!invokedAsScript) {
     // Diagnostics. The first version of this shipped a broken shell form -- a bare `echo` under
     // cmd.exe yields the literal "ECHO is on." -- and there was no way to see what arrived.
     // One line per invocation; the value is truncated.
+  // The plugin reads this and posts it into the session with noReply, so the user always sees
+  // the result even when removing the proxy has just made the provider unreachable and no model
+  // turn can complete. Kept separate from the append-only log above.
+  let resultText = ""
+
     try {
       fs.appendFileSync(
         path.join(dir, 'proxy-command.log'),
@@ -599,7 +604,13 @@ if (!invokedAsScript) {
   )
 
   if (argv[0] === 'proxy-cmd') {
-    console.log(runProxyCommand(argv.slice(1).join(' ')))
+  const outText = runProxyCommand(argv.slice(1).join(" "))
+  try {
+    fs.writeFileSync(path.join(dir, 'proxy-last-result.json'), JSON.stringify({ text: outText, at: Date.now() }))
+  } catch {
+    /* the result file is a convenience; never fail the command over it */
+  }
+  console.log(outText)
     process.exit(0)
   }
 
