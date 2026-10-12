@@ -78,12 +78,6 @@ function loadFileConfig() {
 }
 
 /**
- * Command-managed per-provider mapping: { "<providerID>": "<proxyURL>" }.
- *
- * Kept in its own file so the /proxy command can write it without editing
- * opencode.jsonc, which is JSONC full of comments that must not be destroyed.
- */
-/**
  * Slash commands are NOT registrable from a plugin in this build -- the command list is
  * built from the `command` config map, markdown files, MCP prompts and skills only, and
  * the `source` union has no "plugin" member. The supported way to ship one is a markdown
