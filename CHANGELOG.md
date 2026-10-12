@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.0.23
+
+Remove the debugging instrumentation.
+
+The hook was writing a record on every /proxy invocation: the raw argv and stdin, the parts array,
+and the result of the whitespace filter. That was scaffolding for diagnosing why the command still
+reached a model, and it is no longer needed now that the cause is fixed.
+
+Kept, because they are diagnostics rather than scaffolding:
+
+- `set-proxy.js` still writes `proxy-command.log`, one line per invocation recording what argv
+  actually arrived. That single line is what exposed the `cmd.exe` `ECHO is on.` bug and the
+  `--silent` flag arriving as an argument. No other part of the suite had that visibility.
+- `set-proxy.js` still writes `proxy-last-result.json`, which is how the command result reaches
+  the plugin hook so it can be posted with `noReply`.
+- The hook still logs to stderr if the `noReply` post fails. That is error reporting, not
+  diagnostics.
+
+Both files live in the OpenCode config directory, are plain text, contain no credentials beyond a
+proxy URL the user typed, and can be deleted at any time.
+
 ## 1.0.22
 
 Document what /proxy actually does. No code change.

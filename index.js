@@ -1193,25 +1193,6 @@ set_proxy: buildSetProxyTool(toolHelper, proxyState, persistProxyProviders, () =
      * The hook runs after shell expansion and before the model call.
      */
     "command.execute.before": async (input, output) => {
-      const hookLog = (msg) => {
-        try {
-          fs.appendFileSync(
-            path.join(configDir(), "proxy-hook.log"),
-            new Date().toISOString() + "  " + msg + "\n",
-          )
-        } catch {
-          /* diagnostics must never break the hook */
-        }
-      }
-      hookLog(
-        "fired: command=" + JSON.stringify(input?.command) +
-          " session=" + JSON.stringify(input?.sessionID) +
-          " args=" + JSON.stringify(input?.arguments) +
-          " outputType=" + typeof output +
-          " partsIsArray=" + Array.isArray(output?.parts) +
-          " partsLen=" + (Array.isArray(output?.parts) ? output.parts.length : "n/a") +
-          " parts=" + JSON.stringify(output?.parts)?.slice(0, 400),
-      )
       if (str(input?.command) !== "proxy") return
       const sessionID = str(input?.sessionID)
       if (!sessionID) return
@@ -1260,7 +1241,6 @@ set_proxy: buildSetProxyTool(toolHelper, proxyState, persistProxyProviders, () =
         })
         output.parts.length = 0
         output.parts.push(...kept)
-        hookLog("after filter: partsLen=" + output.parts.length + " kept=" + JSON.stringify(kept)?.slice(0, 200))
       }
 
       // Arm LAST. This hook makes its own HTTP call to the server to post the result with
